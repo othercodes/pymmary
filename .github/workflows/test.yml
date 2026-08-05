@@ -1,0 +1,195 @@
+name: Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Check formatting
+        run: uv run ruff format --check src/ tests/
+
+      - name: Check linting
+        run: uv run ruff check src/ tests/
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run mypy
+        run: uv run mypy src/pymmary
+
+  test:
+    name: Test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: [lint]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Verify core does not import any adapter
+        # pymmary's core promises zero runtime dependencies. pytest is always
+        # present here (it is our test runner), so we cannot check for its
+        # absence the way pyssertive checks for django/httpx. What we can
+        # guarantee is that `import pymmary` never drags an adapter in.
+        # Append new adapter modules to `forbidden` as they are added.
+        run: |
+          uv run python - <<'PY'
+          import sys
+
+          forbidden = ("pytest", "unittest", "mypy")
+          before = set(sys.modules)
+          import pymmary  # noqa: F401
+
+          pulled = [m for m in forbidden if m not in before and m in sys.modules]
+          if pulled:
+              print(f"ERROR: importing pymmary pulled in {pulled}")
+              sys.exit(1)
+          print("OK: pymmary core imports without any adapter")
+          PY
+
+      - name: Run tests
+        run: uv run pytest --cov=pymmary --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=100
+
+      - name: Upload coverage artifact
+        if: matrix.python-version == '3.14'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  sonarcloud:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    needs: [test]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-report
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, sonarcloud]
+    if: always()
+
+    steps:
+      - name: Check all jobs
+        run: |
+          echo "===== Job Results ====="
+          echo "Lint:       ${{ needs.lint.result }}"
+          echo "Typecheck:  ${{ needs.typecheck.result }}"
+          echo "Test:       ${{ needs.test.result }}"
+          echo "SonarCloud: ${{ needs.sonarcloud.result }}"
+          echo "======================="
+
+          fail=0
+
+          if [ "${{ needs.lint.result }}" != "success" ]; then
+            echo "❌ Lint failed"
+            fail=1
+          fi
+
+          if [ "${{ needs.typecheck.result }}" != "success" ]; then
+            echo "❌ Typecheck failed"
+            fail=1
+          fi
+
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "❌ Tests failed"
+            fail=1
+          fi
+
+          if [ "${{ needs.sonarcloud.result }}" != "success" ]; then
+            echo "❌ SonarCloud failed"
+            fail=1
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "🛑 Release blocked — fix the failures above."
+            exit 1
+          fi
+
+          echo "✅ All required checks passed — release-ready."

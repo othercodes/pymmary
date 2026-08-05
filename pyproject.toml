@@ -1,0 +1,104 @@
+[project]
+name = "pymmary"
+dynamic = ["version"]
+description = "Agent-optimized output compressor for Python tooling."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Unay Santisteban", email = "usantisteban@othercode.io" }
+]
+keywords = ["testing", "ai-agents", "pytest", "output", "compression"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Framework :: Pytest",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/othercodes/pymmary"
+Repository = "https://github.com/othercodes/pymmary.git"
+Issues = "https://github.com/othercodes/pymmary/issues"
+
+[project.optional-dependencies]
+pytest = ["pytest>=7.0"]
+
+[project.entry-points.pytest11]
+pymmary = "pymmary.adapters.pytest"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.0.0.dev0"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/pymmary/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pymmary"]
+
+[dependency-groups]
+test-core = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+]
+dev = [
+    {include-group = "test-core"},
+    "ruff>=0.15.12",
+    "mypy>=2.1.0",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+indent-width = 4
+exclude = [
+    ".eggs",
+    ".git",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "build",
+    "dist",
+    "src/pymmary/_version.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "src"]
+addopts = "-p no:pymmary --cov=pymmary --cov-report=term-missing --cov-fail-under=100"
+
+[tool.coverage.run]
+branch = true
+source = ["src/pymmary"]
+omit = ["src/pymmary/_version.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "pragma: no branch",
+    "if TYPE_CHECKING:",
+]
+
+[tool.mypy]
+python_version = "3.10"
+exclude = ["src/pymmary/_version\\.py$"]
+strict = false
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
