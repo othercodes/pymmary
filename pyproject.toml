@@ -31,7 +31,7 @@ Repository = "https://github.com/othercodes/pymmary.git"
 Issues = "https://github.com/othercodes/pymmary/issues"
 
 [project.optional-dependencies]
-pytest = ["pytest>=7.0"]
+pytest = ["pytest>=9.1.1"]
 
 [project.entry-points.pytest11]
 pymmary = "pymmary.adapters.pytest"
@@ -52,13 +52,13 @@ packages = ["src/pymmary"]
 
 [dependency-groups]
 test-core = [
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
 ]
 dev = [
     {include-group = "test-core"},
-    "ruff>=0.15.12",
-    "mypy>=2.1.0",
+    "ruff>=0.16.1",
+    "mypy>=2.3.0",
 ]
 
 [tool.ruff]
