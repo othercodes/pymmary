@@ -56,6 +56,12 @@ pytest
 On failure, only what the agent needs to act:
 
 ```json
+{"tool":"pytest","result":"failed","exit_code":1,"duration":0.32,"summary":{"collected":1002,"passed":999,"failed":2,"error":1},"failures":[{"nodeid":"tests/test_api.py::TestAuth::test_login[user-2]","phase":"call","file":"tests/test_api.py","line":42,"type":"AssertionError","message":"assert 401 == 200"}]}
+```
+
+Every payload is a single line — that is the actual output, not a formatting choice. Expanded, so the fields are readable:
+
+```json
 {
   "tool": "pytest",
   "result": "failed",
@@ -74,6 +80,8 @@ On failure, only what the agent needs to act:
   ]
 }
 ```
+
+`nodeid` is the whole point: paste it straight back into `pytest "tests/test_api.py::TestAuth::test_login[user-2]"` and the agent has its reproduction command.
 
 A run that fails to collect is never reported as a pass — the verdict follows pytest's exit code, not our own tally:
 
