@@ -127,7 +127,7 @@ def _build_result(
         tool="pytest",
         # The exit code decides, never our own tally. Collection errors, internal
         # errors and an empty run all leave `failures` empty while the run is very
-        # much not a success — calling those "passed" is the worst lie we can tell.
+        # much not a success. Calling those "passed" is the worst lie we can tell.
         result="passed" if exit_code == 0 else "failed",
         duration=duration,
         summary=summary,
@@ -148,7 +148,7 @@ def _outcome_of(report: pytest.TestReport) -> str | None:
         return "skipped"
     if report.passed:
         return "passed" if report.when == "call" else None
-    # A failure outside the call phase never ran the test body — pytest calls that
+    # A failure outside the call phase never ran the test body. Pytest calls that
     # an error, and the distinction matters to whoever reads the output.
     return "failed" if report.when == "call" else "error"
 
@@ -173,7 +173,7 @@ _TRACEBACK_LINE = re.compile(r"^.*?:(\d+): in ", re.MULTILINE)
 def _collect_failure_of(report: pytest.CollectReport) -> Failure:
     """Describe a file that never made it to the starting line.
 
-    A CollectReport carries no `reprcrash`, no `location` and no `when` — nothing
+    A CollectReport carries no `reprcrash`, no `location` and no `when`: nothing
     ran, so there is no phase to speak of. What it does carry is the whole rendered
     traceback as text, so we pull the exception off its `E` line and the line number
     off the last frame. `nodeid` is the file itself, which is what the agent needs

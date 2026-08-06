@@ -14,7 +14,7 @@ _DURATION_PRECISION = 3
 DEFAULT_MAX_FAILURES = 20
 """How many failures to spell out before summarizing the rest.
 
-Not a size limit — the JSON is smaller than the human report either way. It is a
+Not a size limit, the JSON is smaller than the human report either way. It is a
 diminishing-returns limit: an agent facing 400 failures fixes the first few and
 runs again, so failures 21 to 400 cost context and buy nothing. Raise it with
 ``PYMMARY_MAX_FAILURES``, or set it to 0 to keep every last one.
@@ -46,10 +46,10 @@ def max_failures_from(env: Mapping[str, str]) -> int:
 def render(result: Result, max_failures: int = DEFAULT_MAX_FAILURES) -> str:
     """Serialize a Result to the one-line JSON an agent reads.
 
-    Pure function — no I/O. Three compression rules do the real work: zero-valued
+    Pure function, no I/O. Three compression rules do the real work: zero-valued
     counts are dropped, ``failures`` is absent entirely on a green run, and long
     failure lists are cut to ``max_failures`` (0 means keep them all). Whatever is
-    cut is declared in ``failures_omitted`` — the counts in ``summary`` always
+    cut is declared in ``failures_omitted``. The counts in ``summary`` always
     describe the whole run.
     """
     payload: dict[str, Any] = {"tool": result.tool, "result": result.result}

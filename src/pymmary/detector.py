@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 FORCE_VARIABLE = "PYMMARY_FORCE"
 
-# (agent name, variable, exact value the variable must hold — None means "any non-empty value")
+# (agent name, variable, exact value the variable must hold; None means "any non-empty value")
 _SIGNALS: tuple[tuple[str, str, str | None], ...] = (
     ("claude-code", "CLAUDECODE", None),
     ("cursor", "CURSOR_TRACE_ID", None),

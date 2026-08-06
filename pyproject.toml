@@ -31,8 +31,8 @@ Repository = "https://github.com/othercodes/pymmary.git"
 Issues = "https://github.com/othercodes/pymmary/issues"
 
 [project.optional-dependencies]
-# 9.1 is a hard floor, not a preference, and dependabot must not move it —
-# see the ignore rule in .github/dependabot.yml.
+# 9.1 is a hard floor, not a preference, and dependabot must not move it.
+# See the ignore rule in .github/dependabot.yml.
 #   - 8.0 for @pytest.hookimpl(wrapper=True)
 #   - 9.1 because the adapter unregisters the terminal reporter, and until 9.1
 #     _pytest/assertion/util.py built its explanation through
