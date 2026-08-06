@@ -293,6 +293,69 @@ def test_plugin_should_report_no_tests_collected(pytester: pytest.Pytester, agen
     assert payload["summary"] == {}
 
 
+# -- collection errors: the suite never ran --
+
+
+def test_plugin_should_not_call_a_collection_error_a_pass(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile(
+        """
+        import this_module_does_not_exist
+
+
+        def test_never_runs():
+            assert True
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["result"] == "failed"
+
+
+def test_plugin_should_describe_a_collection_error(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile(
+        """
+        import this_module_does_not_exist
+
+
+        def test_never_runs():
+            assert True
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    failure = payload["failures"][0]
+    assert failure["phase"] == "collect"
+    assert failure["type"] == "ModuleNotFoundError"
+    assert "this_module_does_not_exist" in failure["message"]
+
+
+def test_plugin_should_count_a_collection_error(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile(
+        """
+        import this_module_does_not_exist
+
+
+        def test_never_runs():
+            assert True
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["summary"]["error"] == 1
+
+
+def test_plugin_should_not_call_an_empty_run_a_pass(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile("# nothing here\n")
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["result"] == "failed"
+    assert payload["exit_code"] == 5
+
+
 # -- xdist: strict no-op --
 
 

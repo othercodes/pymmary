@@ -74,7 +74,26 @@ On failure, only what the agent needs to act:
 }
 ```
 
-To see the compressed output as a human, set `PYMMARY_FORCE=1`.
+A run that fails to collect is never reported as a pass — the verdict follows pytest's exit code, not our own tally:
+
+```json
+{"tool":"pytest","result":"failed","exit_code":2,"duration":0.008,"summary":{"error":1},"failures":[{"nodeid":"test_broken.py","phase":"collect","file":"test_broken.py","line":1,"type":"ModuleNotFoundError","message":"No module named 'requests'"}]}
+```
+
+## Configuration
+
+Two environment variables, no config file and no CLI flags:
+
+| Variable | Effect |
+|---|---|
+| `PYMMARY_FORCE=1` | Compress even when no agent is detected — useful to see what an agent sees |
+| `PYMMARY_MAX_FAILURES=N` | How many failures to spell out. Default 20; `0` keeps every one of them |
+
+The cap is about diminishing returns, not size: an agent facing 400 failures fixes a handful and runs again, so the rest cost context and buy nothing. `summary` always counts the whole run, and whatever was left out is declared in `failures_omitted`. On a 400-failure suite: 98,671 bytes of human output, 56,826 uncapped, **2,900 by default**.
+
+## Limitations
+
+- **pytest-xdist**: pymmary stands down completely under `-n`, leaving normal pytest output. The controller never runs the tests itself, so a compressed summary would count none of them. Aggregating the worker streams is planned.
 
 ## Related
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from pymmary.schema import Result
@@ -10,17 +11,46 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
 _DURATION_PRECISION = 3
 
+DEFAULT_MAX_FAILURES = 20
+"""How many failures to spell out before summarizing the rest.
+
+Not a size limit — the JSON is smaller than the human report either way. It is a
+diminishing-returns limit: an agent facing 400 failures fixes the first few and
+runs again, so failures 21 to 400 cost context and buy nothing. Raise it with
+``PYMMARY_MAX_FAILURES``, or set it to 0 to keep every last one.
+"""
+
+MAX_FAILURES_VARIABLE = "PYMMARY_MAX_FAILURES"
+
 
 def strip_ansi(text: str) -> str:
     """Drop ANSI escape sequences. Colour codes are noise inside a JSON string."""
     return _ANSI.sub("", text)
 
 
-def render(result: Result) -> str:
+def max_failures_from(env: Mapping[str, str]) -> int:
+    """Read the failure cap, falling back to the default on anything unusable.
+
+    A typo in an environment variable must never take a test run down with it.
+    """
+    raw = env.get(MAX_FAILURES_VARIABLE)
+    if raw is None:
+        return DEFAULT_MAX_FAILURES
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_FAILURES
+    return value if value >= 0 else DEFAULT_MAX_FAILURES
+
+
+def render(result: Result, max_failures: int = DEFAULT_MAX_FAILURES) -> str:
     """Serialize a Result to the one-line JSON an agent reads.
 
-    Pure function — no I/O. Two compression rules do the real work: zero-valued
-    counts are dropped, and ``failures`` is absent entirely on a green run.
+    Pure function — no I/O. Three compression rules do the real work: zero-valued
+    counts are dropped, ``failures`` is absent entirely on a green run, and long
+    failure lists are cut to ``max_failures`` (0 means keep them all). Whatever is
+    cut is declared in ``failures_omitted`` — the counts in ``summary`` always
+    describe the whole run.
     """
     payload: dict[str, Any] = {"tool": result.tool, "result": result.result}
 
@@ -31,6 +61,7 @@ def render(result: Result) -> str:
     payload["summary"] = {name: count for name, count in result.summary.items() if count}
 
     if result.failures:
+        shown = result.failures if max_failures == 0 else result.failures[:max_failures]
         payload["failures"] = [
             {
                 "nodeid": failure.nodeid,
@@ -40,7 +71,10 @@ def render(result: Result) -> str:
                 "type": failure.type,
                 "message": strip_ansi(failure.message),
             }
-            for failure in result.failures
+            for failure in shown
         ]
+        omitted = len(result.failures) - len(shown)
+        if omitted:
+            payload["failures_omitted"] = omitted
 
     return json.dumps(payload, separators=(",", ":"))
