@@ -90,7 +90,27 @@ Two environment variables, no config file and no CLI flags:
 | `PYMMARY_FORCE=1` | Compress even when no agent is detected — useful to see what an agent sees |
 | `PYMMARY_MAX_FAILURES=N` | How many failures to spell out. Default 20; `0` keeps every one of them |
 
-The cap is about diminishing returns, not size: an agent facing 400 failures fixes a handful and runs again, so the rest cost context and buy nothing. `summary` always counts the whole run, and whatever was left out is declared in `failures_omitted`. On a 400-failure suite: 98,671 bytes of human output, 56,826 uncapped, **2,900 by default**.
+The cap is about diminishing returns, not size: an agent facing 400 failures fixes a handful and runs again, so the rest cost context and buy nothing. `summary` always counts the whole run, and whatever was left out is declared in `failures_omitted`.
+
+## How much it actually saves
+
+Tokens, not bytes — tokens are what an agent pays for. Counted with `tiktoken` (`o200k_base`) on real pytest output:
+
+| Scenario | pytest | pymmary | Saving |
+|---|---:|---:|---:|
+| 1 test, green | 136 | 31 | 4.4× |
+| 100 tests, green | 146 | 31 | 4.7× |
+| 1000 tests, green | 238 | 33 | 7.2× |
+| 3 tests, 1 failure | 218 | 82 | 2.7× |
+| 5 failures | 457 | 246 | 1.9× |
+| 400 tests, 20 failures | 1,445 | 900 | 1.6× |
+| 400 failures | 24,868 | 884 | 28.1× |
+
+`cl100k_base` agrees within 3%.
+
+The floor is **1.6×**, on a suite with many failures but no cap hit — failure bodies are the one thing that does not compress much. The ceiling is a big green suite, where pymmary's output stays flat at ~31 tokens no matter how many tests ran.
+
+Note that JSON tokenizes worse than prose — all those quotes and braces — so the saving in tokens is consistently lower than the saving in bytes. The 1000-test green run is 14.6× smaller in bytes but only 7.2× cheaper in tokens. These are OpenAI encodings; Anthropic does not publish a tokenizer for current Claude models, so treat this as a close proxy rather than an exact figure.
 
 ## Limitations
 
