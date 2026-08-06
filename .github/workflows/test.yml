@@ -127,6 +127,47 @@ jobs:
           name: coverage-report
           path: coverage.xml
 
+  test-min-pytest:
+    name: Test (oldest supported pytest, py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: [lint]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Pin pytest to the floor declared in pyproject
+        # The `test` matrix always resolves to the newest pytest, so nothing there
+        # can catch a broken floor. The adapter unregisters the terminal reporter,
+        # and before 9.1 that silently destroyed every assertion explanation —
+        # exactly the payload this library exists to produce.
+        # Bump this in lockstep with the `pytest` extra, never separately.
+        run: uv pip install "pytest==9.1.0"
+
+      - name: Run tests
+        # --no-sync or uv would resolve pytest straight back to latest.
+        # Coverage is enforced by the `test` job; this one is about compatibility.
+        run: uv run --no-sync pytest --cov-fail-under=0 --cov-report=
+
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
@@ -152,17 +193,18 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, sonarcloud]
+    needs: [lint, typecheck, test, test-min-pytest, sonarcloud]
     if: always()
 
     steps:
       - name: Check all jobs
         run: |
           echo "===== Job Results ====="
-          echo "Lint:       ${{ needs.lint.result }}"
-          echo "Typecheck:  ${{ needs.typecheck.result }}"
-          echo "Test:       ${{ needs.test.result }}"
-          echo "SonarCloud: ${{ needs.sonarcloud.result }}"
+          echo "Lint:              ${{ needs.lint.result }}"
+          echo "Typecheck:         ${{ needs.typecheck.result }}"
+          echo "Test:              ${{ needs.test.result }}"
+          echo "Test (min pytest): ${{ needs.test-min-pytest.result }}"
+          echo "SonarCloud:        ${{ needs.sonarcloud.result }}"
           echo "======================="
 
           fail=0
@@ -179,6 +221,11 @@ jobs:
 
           if [ "${{ needs.test.result }}" != "success" ]; then
             echo "❌ Tests failed"
+            fail=1
+          fi
+
+          if [ "${{ needs.test-min-pytest.result }}" != "success" ]; then
+            echo "❌ Tests on the oldest supported pytest failed"
             fail=1
           fi
 

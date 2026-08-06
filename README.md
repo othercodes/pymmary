@@ -5,7 +5,7 @@
 
 Agent-optimized output compressor for Python tooling.
 
-> **Status: early development.** The scaffolding is in place; the pytest adapter is not implemented yet and nothing is published to PyPI.
+> **Status: early development.** The pytest adapter works; nothing is published to PyPI yet.
 
 ## Why
 
@@ -26,7 +26,7 @@ It is a decision of the *project*, not of the agent's environment. Add it as a d
 ## Requirements
 
 - Python 3.10+
-- pytest 8.0+ (optional, for `pymmary[pytest]`)
+- pytest 9.1+ (optional, for `pymmary[pytest]`)
 
 ## Installation
 
@@ -94,6 +94,7 @@ The cap is about diminishing returns, not size: an agent facing 400 failures fix
 ## Limitations
 
 - **pytest-xdist**: pymmary stands down completely under `-n`, leaving normal pytest output. The controller never runs the tests itself, so a compressed summary would count none of them. Aggregating the worker streams is planned.
+- **pytest 9.1 is a hard floor.** The adapter unregisters pytest's terminal reporter to own the output. Before 9.1, pytest built assertion explanations through `config.get_terminal_writer()`, which asserts that reporter is still registered — so on older versions every `assert` failure degrades to a bare `AssertionError` pointing into pytest's internals. That is the one payload this library exists to produce, so the floor is enforced rather than worked around.
 
 ## Related
 
