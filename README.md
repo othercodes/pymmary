@@ -2,10 +2,11 @@
 
 [![Build Status](https://github.com/othercodes/pymmary/actions/workflows/test.yml/badge.svg)](https://github.com/othercodes/pymmary/actions/workflows/test.yml)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=othercodes_pymmary&metric=coverage)](https://sonarcloud.io/summary/new_code?id=othercodes_pymmary)
+[![PyPI](https://img.shields.io/pypi/v/pymmary.svg)](https://pypi.org/project/pymmary/)
 
 Agent-optimized output compressor for Python tooling.
 
-> **Status: early development.** The pytest adapter works; nothing is published to PyPI yet.
+> **Status: alpha.** The pytest adapter is the only one so far.
 
 ## Why
 
