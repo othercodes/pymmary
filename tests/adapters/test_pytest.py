@@ -293,6 +293,66 @@ def test_plugin_should_report_no_tests_collected(pytester: pytest.Pytester, agen
     assert payload["summary"] == {}
 
 
+# -- xdist: strict no-op --
+
+
+def test_plugin_should_stay_silent_on_an_xdist_worker(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makeconftest(
+        """
+        def pytest_configure(config):
+            config.workerinput = {}
+        """
+    )
+    pytester.makepyfile(
+        """
+        def test_ok():
+            assert True
+        """
+    )
+
+    run = pytester.runpytest_inprocess()
+
+    assert "{" not in run.stdout.str()
+    run.stdout.fnmatch_lines(["*1 passed*"])
+
+
+def test_plugin_should_stay_silent_when_the_run_is_distributed(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makeconftest(
+        """
+        def pytest_configure(config):
+            config.option.dist = "load"
+        """
+    )
+    pytester.makepyfile(
+        """
+        def test_ok():
+            assert True
+        """
+    )
+
+    run = pytester.runpytest_inprocess()
+
+    assert "{" not in run.stdout.str()
+
+
+def test_plugin_should_stay_silent_under_real_xdist(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile(
+        """
+        def test_one():
+            assert True
+
+
+        def test_two():
+            assert True
+        """
+    )
+
+    run = pytester.runpytest_subprocess("-n", "2")
+
+    assert "{" not in run.stdout.str()
+    run.stdout.fnmatch_lines(["*2 passed*"])
+
+
 # -- force hatch --
 
 

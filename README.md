@@ -26,7 +26,7 @@ It is a decision of the *project*, not of the agent's environment. Add it as a d
 ## Requirements
 
 - Python 3.10+
-- pytest 7.0+ (optional, for `pymmary[pytest]`)
+- pytest 8.0+ (optional, for `pymmary[pytest]`)
 
 ## Installation
 

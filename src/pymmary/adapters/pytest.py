@@ -18,11 +18,26 @@ _started_key = pytest.StashKey[float]()
 _FAILED_OUTCOMES = ("failed", "error")
 
 
+def _is_distributed(config: pytest.Config) -> bool:
+    """True when pytest-xdist is doing the running.
+
+    Workers each build their own report stream and the controller never runs a test
+    itself, so our per-item collection sees nothing there and would emit a green
+    summary with zero tests in it. A wrong summary is worse than an uncompressed
+    one, so we stand down entirely.
+
+    ponytail: no-op under xdist; aggregate the worker streams if anyone asks.
+    """
+    if hasattr(config, "workerinput"):
+        return True
+    return bool(config.getoption("dist", "no") != "no")
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     # trylast: the built-in reporter registers itself in its own pytest_configure,
     # so running first would find nothing to unregister.
-    enabled = is_agent_environment(os.environ) is not None
+    enabled = is_agent_environment(os.environ) is not None and not _is_distributed(config)
     config.stash[_enabled_key] = enabled
     if not enabled:
         return
