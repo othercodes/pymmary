@@ -11,7 +11,7 @@ _SIGNALS = ("CLAUDECODE", "CURSOR_TRACE_ID", "TERM_PROGRAM", "GEMINI_CLI_SESSION
 
 @pytest.fixture
 def no_agent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Strip every detection signal — the developer machine may well be an agent."""
+    """Strip every detection signal, the developer machine may well be an agent."""
     for signal in _SIGNALS:
         monkeypatch.delenv(signal, raising=False)
 

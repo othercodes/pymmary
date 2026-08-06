@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 class Failure:
     """A single thing that went wrong, identified the way the host tool identifies it.
 
-    For pytest that means ``nodeid`` — the exact string you can paste back on the
+    For pytest that means ``nodeid``: the exact string you can paste back on the
     command line to re-run just this one.
     """
 

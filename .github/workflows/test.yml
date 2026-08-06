@@ -158,7 +158,7 @@ jobs:
       - name: Pin pytest to the floor declared in pyproject
         # The `test` matrix always resolves to the newest pytest, so nothing there
         # can catch a broken floor. The adapter unregisters the terminal reporter,
-        # and before 9.1 that silently destroyed every assertion explanation —
+        # and before 9.1 that silently destroyed every assertion explanation,
         # exactly the payload this library exists to produce.
         # Bump this in lockstep with the `pytest` extra, never separately.
         run: uv pip install "pytest==9.1.0"
@@ -235,8 +235,8 @@ jobs:
           fi
 
           if [ "$fail" -ne 0 ]; then
-            echo "🛑 Release blocked — fix the failures above."
+            echo "🛑 Release blocked, fix the failures above."
             exit 1
           fi
 
-          echo "✅ All required checks passed — release-ready."
+          echo "✅ All required checks passed, release-ready."
