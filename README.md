@@ -21,6 +21,7 @@ It is a decision of the *project*, not of the agent's environment. Add it as a d
 - Automatic agent detection via environment variables, no configuration
 - Strict no-op fallback: no agent, no change to output
 - Compact JSON keyed by pytest `nodeid`, so failures are pasteable straight back into the CLI
+- One summary under `pytest-xdist` too, with the worker reports aggregated on the controller
 - Zero runtime dependencies in the core; each adapter ships behind its own extra
 - Hooks into the host tool's native extension points, no global monkey-patching
 
@@ -89,6 +90,10 @@ A run that fails to collect is never reported as a pass. The verdict follows pyt
 {"tool":"pytest","result":"failed","exit_code":2,"duration":0.008,"summary":{"error":1},"failures":[{"nodeid":"test_broken.py","phase":"collect","file":"test_broken.py","line":1,"type":"ModuleNotFoundError","message":"No module named 'requests'"}]}
 ```
 
+### Under pytest-xdist
+
+`-n` changes nothing about what you read. The workers ship their reports to the controller, which prints the same single line, with failures described in the same detail. `duration` is wall clock, the time actually spent waiting, so it falls as you add workers. The order of `failures` is the order the workers happened to finish in; `summary` is the part that compares cleanly between runs.
+
 ## Configuration
 
 Two environment variables, no config file and no CLI flags:
@@ -122,7 +127,6 @@ Note that JSON tokenizes worse than prose, all those quotes and braces, so the s
 
 ## Limitations
 
-- **pytest-xdist**: pymmary stands down completely under `-n`, leaving normal pytest output. The controller never runs the tests itself, so a compressed summary would count none of them. Aggregating the worker streams is planned.
 - **pytest 9.1 is a hard floor.** The adapter unregisters pytest's terminal reporter to own the output. Before 9.1, pytest built assertion explanations through `config.get_terminal_writer()`, which asserts that reporter is still registered, so on older versions every `assert` failure degrades to a bare `AssertionError` pointing into pytest's internals. That is the one payload this library exists to produce, so the floor is enforced rather than worked around.
 
 ## Related

@@ -63,7 +63,8 @@ packages = ["src/pymmary"]
 test-core = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    # Only to prove the adapter stays a no-op under distributed runs.
+    # Not a dev convenience: the adapter aggregates worker reports, and the only
+    # way to prove that is a real distributed run.
     "pytest-xdist>=3.8.0",
 ]
 dev = [
