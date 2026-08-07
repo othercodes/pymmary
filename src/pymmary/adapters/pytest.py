@@ -189,16 +189,46 @@ def _collect_failure_of(report: pytest.CollectReport) -> Failure:
     )
 
 
+def _origin_of(report: pytest.TestReport) -> tuple[str, int]:
+    """Where pytest itself says the failure happened, file and line as one pair.
+
+    Taking them from separate sources is how they end up contradicting each other.
+    ``reprcrash`` points at the frame that raised, which for ``self.assertEqual``
+    or any wrapped assertion is inside somebody else's file, while
+    ``report.location`` names the test file. Combined they describe a coordinate
+    that does not exist: ``test_auth.py:918`` in a file of twelve lines.
+
+    The last entry of the rendered traceback is the one pytest prints as
+    ``path:lineno:``, already relative and already 1-based, and it is a pair. It is
+    also the frame the ecosystem points us at: assertion helpers that set
+    ``__tracebackhide__``, pyssertive among them, drop out of the traceback so the
+    last entry lands back in the test.
+    """
+    traceback = getattr(report.longrepr, "reprtraceback", None)
+    entries = getattr(traceback, "reprentries", ())
+    location = getattr(entries[-1], "reprfileloc", None) if entries else None
+    if location is not None:
+        return str(location.path), int(location.lineno)
+
+    # No traceback to read: `--tb=no` and `--tb=native` both get here. Falling back
+    # to the crash keeps the pair honest, at the cost of an absolute path.
+    crash = getattr(report.longrepr, "reprcrash", None)
+    if crash is not None:
+        return str(crash.path), int(crash.lineno)
+    return str(report.location[0]), 0
+
+
 def _failure_of(report: pytest.TestReport) -> Failure:
     crash = getattr(report.longrepr, "reprcrash", None)
     raw = crash.message if crash is not None else str(report.longrepr)
     type_name, message = _split_crash_message(raw)
+    file, line = _origin_of(report)
 
     return Failure(
         nodeid=report.nodeid,
         phase=str(report.when),
-        file=str(report.location[0]),
-        line=crash.lineno if crash is not None else 0,
+        file=file,
+        line=line,
         type=type_name,
         message=message,
     )
