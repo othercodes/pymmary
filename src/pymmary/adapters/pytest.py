@@ -4,7 +4,6 @@ import os
 import re
 import time
 from collections import Counter
-from collections.abc import Generator
 
 import pytest
 
@@ -12,12 +11,9 @@ from pymmary.detector import is_agent_environment
 from pymmary.emitter import max_failures_from, render
 from pymmary.schema import Failure, Result
 
-_enabled_key = pytest.StashKey[bool]()
-_reports_key = pytest.StashKey[list[pytest.TestReport]]()
-_collect_errors_key = pytest.StashKey[list[pytest.CollectReport]]()
-_started_key = pytest.StashKey[float]()
-
 _FAILED_OUTCOMES = ("failed", "error")
+
+PLUGIN_NAME = "pymmary-collector"
 
 
 def _is_distributed(config: pytest.Config) -> bool:
@@ -35,17 +31,52 @@ def _is_distributed(config: pytest.Config) -> bool:
     return bool(config.getoption("dist", "no") != "no")
 
 
+class Collector:
+    """Accumulates one run and prints its summary when the session ends.
+
+    An object rather than the module-level hooks the rest of pymmary uses, because
+    ``pytest_runtest_logreport`` is handed a report and nothing else: no item, no
+    config, so no stash to write into. Keeping config on the instance is how
+    pytest's own terminal reporter solves the same problem.
+    """
+
+    def __init__(self, config: pytest.Config) -> None:
+        self.config = config
+        self.reports: list[pytest.TestReport] = []
+        self.collect_errors: list[pytest.CollectReport] = []
+        self.started = 0.0
+
+    def pytest_sessionstart(self) -> None:
+        # Timed from here rather than from __init__ so `duration` means what the
+        # footer pytest prints means, which is also measured from this hook.
+        self.started = time.perf_counter()
+
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        self.reports.append(report)
+
+    def pytest_collectreport(self, report: pytest.CollectReport) -> None:
+        if report.failed:
+            self.collect_errors.append(report)
+
+    def pytest_sessionfinish(self, session: pytest.Session, exitstatus: int) -> None:
+        result = _build_result(
+            reports=self.reports,
+            collect_errors=self.collect_errors,
+            collected=session.testscollected,
+            exit_code=int(exitstatus),
+            duration=time.perf_counter() - self.started,
+        )
+        print(render(result, max_failures=max_failures_from(os.environ)))
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     # trylast: the built-in reporter registers itself in its own pytest_configure,
     # so running first would find nothing to unregister.
-    enabled = is_agent_environment(os.environ) is not None and not _is_distributed(config)
-    config.stash[_enabled_key] = enabled
-    if not enabled:
+    if is_agent_environment(os.environ) is None or _is_distributed(config):
         return
 
-    config.stash[_reports_key] = []
-    config.stash[_collect_errors_key] = []
+    config.pluginmanager.register(Collector(config), PLUGIN_NAME)
 
     # Own the terminal outright instead of muting the default reporter piecemeal:
     # unregistering is pytest's supported way to drop a plugin, and it leaves no
@@ -53,48 +84,6 @@ def pytest_configure(config: pytest.Config) -> None:
     reporter = config.pluginmanager.getplugin("terminalreporter")
     if reporter is not None:
         config.pluginmanager.unregister(reporter)
-
-
-def pytest_sessionstart(session: pytest.Session) -> None:
-    session.config.stash[_started_key] = time.perf_counter()
-
-
-@pytest.hookimpl(wrapper=True)
-def pytest_runtest_makereport(
-    item: pytest.Item,
-) -> Generator[None, pytest.TestReport, pytest.TestReport]:
-    # A wrapper rather than pytest_runtest_logreport: this is the only per-report
-    # hook that also hands us the item, and therefore its config and our stash.
-    report = yield
-    if item.config.stash.get(_enabled_key, False):
-        item.config.stash[_reports_key].append(report)
-    return report
-
-
-@pytest.hookimpl(wrapper=True)
-def pytest_make_collect_report(
-    collector: pytest.Collector,
-) -> Generator[None, pytest.CollectReport, pytest.CollectReport]:
-    report = yield
-    if collector.config.stash.get(_enabled_key, False) and report.failed:
-        collector.config.stash[_collect_errors_key].append(report)
-    return report
-
-
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    config = session.config
-    if not config.stash.get(_enabled_key, False):
-        return
-
-    duration = time.perf_counter() - config.stash[_started_key]
-    result = _build_result(
-        reports=config.stash[_reports_key],
-        collect_errors=config.stash[_collect_errors_key],
-        collected=session.testscollected,
-        exit_code=int(exitstatus),
-        duration=duration,
-    )
-    print(render(result, max_failures=max_failures_from(os.environ)))
 
 
 def _build_result(
