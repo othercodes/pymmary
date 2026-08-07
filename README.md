@@ -10,25 +10,35 @@ Agent-optimized output compressor for Python tooling.
 
 ## Why
 
-When an AI agent runs `pytest`, it pays for output written for humans: progress dots, a full traceback per failure, colour codes, a summary table. A green run of a thousand tests tells the agent one thing ("everything passed") and charges thousands of tokens to say it.
+Python tools write for humans: progress indicators, a full traceback per problem, colour codes, a summary table. When an AI agent runs one of those tools, it pays for all of it. A green run of a thousand tests tells the agent one thing ("everything passed") and charges thousands of tokens to say it.
 
 Pymmary detects that a coding agent is running the tool and replaces that output with compact JSON. Outside an agent, nothing changes: no agent detected, no compression, byte-identical output for humans.
 
-It is a decision of the *project*, not of the agent's environment. Add it as a dev dependency and any agent that clones the repo and runs `pytest` benefits, with no per-machine setup.
+It is a decision of the *project*, not of the agent's environment. Add it as a dev dependency and any agent that clones the repo and runs your tools benefits, with no per-machine setup.
+
+## Adapters
+
+Each tool gets its own adapter, its own extra, and its own page. The payload speaks that tool's vocabulary rather than a normalized one, so the details live with the adapter:
+
+| Tool | Install | Docs |
+|---|---|---|
+| pytest | `pymmary[pytest]` | [pytest adapter](https://github.com/othercodes/pymmary/blob/master/docs/pytest.md) |
+
+Planned: mypy, then unittest.
 
 ## Features
 
 - Automatic agent detection via environment variables, no configuration
 - Strict no-op fallback: no agent, no change to output
-- Compact JSON keyed by pytest `nodeid`, so failures are pasteable straight back into the CLI
-- One summary under `pytest-xdist` too, with the worker reports aggregated on the controller
+- One shared envelope across adapters, with a payload in each tool's own vocabulary
 - Zero runtime dependencies in the core; each adapter ships behind its own extra
 - Hooks into the host tool's native extension points, no global monkey-patching
 
 ## Requirements
 
 - Python 3.10+
-- pytest 9.1+ (optional, for `pymmary[pytest]`)
+
+Adapters add their own, listed on each adapter page.
 
 ## Installation
 
@@ -36,63 +46,46 @@ It is a decision of the *project*, not of the agent's environment. Add it as a d
 pip install pymmary
 ```
 
-With the pytest adapter:
+With an adapter:
 
 ```bash
 pip install pymmary[pytest]
 ```
 
-## Usage
+Nothing to wire up after that. Adapters register themselves through the host tool's own plugin mechanism, so installing as a dev dependency is the whole setup.
 
-Nothing to wire up. Install it as a dev dependency and run your tools as usual. When a supported agent is detected, output is compressed.
+## The envelope
 
-```bash
-pytest
-```
+Every adapter emits these four keys, so an agent recognizes any pymmary output at a glance:
+
+| Key | Meaning |
+|---|---|
+| `tool` | Which tool produced this |
+| `result` | `"passed"` / `"failed"`, the one-word verdict |
+| `duration` | Seconds, float, rounded to 3 decimals |
+| `summary` | Counts, in the host tool's own outcome vocabulary |
+
+Adapters add top-level keys where their tool has more to say. The pytest adapter adds `exit_code` and `failures`, for example, and a green suite of 1002 tests comes out as one line:
 
 ```json
 {"tool":"pytest","result":"passed","exit_code":0,"duration":0.32,"summary":{"collected":1002,"passed":1002}}
 ```
 
-On failure, only what the agent needs to act:
+Two rules hold across every adapter:
 
-```json
-{"tool":"pytest","result":"failed","exit_code":1,"duration":0.32,"summary":{"collected":1002,"passed":999,"failed":2,"error":1},"failures":[{"nodeid":"tests/test_api.py::TestAuth::test_login[user-2]","phase":"call","file":"tests/test_api.py","line":42,"type":"AssertionError","message":"assert 401 == 200"}]}
-```
+- **`result` follows the tool's exit code, never our own tally.** A run that broke before it could report anything is never called a pass.
+- **`summary` uses the tool's own words.** pytest counts passed and xfailed, mypy counts errors and notes. Normalizing them would throw away the thing that makes the payload useful.
 
-Every payload is a single line. That is the actual output, not a formatting choice. Expanded, so the fields are readable:
+## Agent detection
 
-```json
-{
-  "tool": "pytest",
-  "result": "failed",
-  "exit_code": 1,
-  "duration": 0.32,
-  "summary": { "collected": 1002, "passed": 999, "failed": 2, "error": 1 },
-  "failures": [
-    {
-      "nodeid": "tests/test_api.py::TestAuth::test_login[user-2]",
-      "phase": "call",
-      "file": "tests/test_api.py",
-      "line": 42,
-      "type": "AssertionError",
-      "message": "assert 401 == 200"
-    }
-  ]
-}
-```
+| Agent | Signal |
+|---|---|
+| Claude Code | `CLAUDECODE` set to any non-empty value |
+| Cursor | `CURSOR_TRACE_ID` set to any non-empty value |
+| Devin | `TERM_PROGRAM=Devin` exactly |
+| Gemini CLI | any variable starting with `GEMINI_CLI_` |
 
-`nodeid` is the whole point: paste it straight back into `pytest "tests/test_api.py::TestAuth::test_login[user-2]"` and the agent has its reproduction command.
-
-A run that fails to collect is never reported as a pass. The verdict follows pytest's exit code, not our own tally:
-
-```json
-{"tool":"pytest","result":"failed","exit_code":2,"duration":0.008,"summary":{"error":1},"failures":[{"nodeid":"test_broken.py","phase":"collect","file":"test_broken.py","line":1,"type":"ModuleNotFoundError","message":"No module named 'requests'"}]}
-```
-
-### Under pytest-xdist
-
-`-n` changes nothing about what you read. The workers ship their reports to the controller, which prints the same single line, with failures described in the same detail. `duration` is wall clock, the time actually spent waiting, so it falls as you add workers. The order of `failures` is the order the workers happened to finish in; `summary` is the part that compares cleanly between runs.
+Anything else, plain shells and generic CI included, falls through and leaves output untouched. No TTY checks, no parent-process inspection, no network.
 
 ## Configuration
 
@@ -101,39 +94,19 @@ Two environment variables, no config file and no CLI flags:
 | Variable | Effect |
 |---|---|
 | `PYMMARY_FORCE=1` | Compress even when no agent is detected, useful to see what an agent sees |
-| `PYMMARY_MAX_FAILURES=N` | How many failures to spell out. Default 20; `0` keeps every one of them |
+| `PYMMARY_MAX_FAILURES=N` | How many problems to spell out. Default 20; `0` keeps every one of them |
 
 The cap is about diminishing returns, not size: an agent facing 400 failures fixes a handful and runs again, so the rest cost context and buy nothing. `summary` always counts the whole run, and whatever was left out is declared in `failures_omitted`.
 
-## How much it actually saves
+## How much it saves
 
-Tokens, not bytes: tokens are what an agent pays for. Counted with `tiktoken` (`o200k_base`) on real pytest output:
-
-| Scenario | pytest | pymmary | Saving |
-|---|---:|---:|---:|
-| 1 test, green | 136 | 31 | 4.4× |
-| 100 tests, green | 146 | 31 | 4.7× |
-| 1000 tests, green | 238 | 33 | 7.2× |
-| 3 tests, 1 failure | 218 | 82 | 2.7× |
-| 5 failures | 457 | 246 | 1.9× |
-| 400 tests, 20 failures | 1,445 | 900 | 1.6× |
-| 400 failures | 24,868 | 884 | 28.1× |
-
-`cl100k_base` agrees within 3%.
-
-The floor is **1.6×**, on a suite with many failures but no cap hit. Failure bodies are the one thing that does not compress much. The ceiling is a big green suite, where pymmary's output stays flat at ~31 tokens no matter how many tests ran.
-
-Note that JSON tokenizes worse than prose, all those quotes and braces, so the saving in tokens is consistently lower than the saving in bytes. The 1000-test green run is 14.6× smaller in bytes but only 7.2× cheaper in tokens. These are OpenAI encodings; Anthropic does not publish a tokenizer for current Claude models, so treat this as a close proxy rather than an exact figure.
-
-## Limitations
-
-- **pytest 9.1 is a hard floor.** The adapter unregisters pytest's terminal reporter to own the output. Before 9.1, pytest built assertion explanations through `config.get_terminal_writer()`, which asserts that reporter is still registered, so on older versions every `assert` failure degrades to a bare `AssertionError` pointing into pytest's internals. That is the one payload this library exists to produce, so the floor is enforced rather than worked around.
+Tokens, not bytes, since tokens are what an agent pays for. On pytest output the saving runs from **1.6× to 28×** depending on the shape of the run: best on large green suites, worst on suites with many failures, since failure bodies barely compress. The full table and the method are on the [pytest adapter page](https://github.com/othercodes/pymmary/blob/master/docs/pytest.md#how-much-it-saves).
 
 ## Related
 
 Companion to [pyssertive](https://github.com/othercodes/pyssertive) (assert phase) and [pyrrange](https://github.com/othercodes/pyrrange) (arrange phase). Pymmary covers the report phase, for AI consumers.
 
-Inspired by [laravel/pao](https://github.com/laravel/pao), the PHP original. Pymmary keeps its envelope recognizable but speaks pytest's own vocabulary rather than PHPUnit's.
+Inspired by [laravel/pao](https://github.com/laravel/pao), the PHP original.
 
 ## License
 
