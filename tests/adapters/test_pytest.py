@@ -356,7 +356,7 @@ def test_plugin_should_not_call_an_empty_run_a_pass(pytester: pytest.Pytester, a
     assert payload["exit_code"] == 5
 
 
-# -- xdist: strict no-op --
+# -- xdist --
 
 
 def test_plugin_should_stay_silent_on_an_xdist_worker(pytester: pytest.Pytester, agent: None) -> None:
@@ -375,30 +375,12 @@ def test_plugin_should_stay_silent_on_an_xdist_worker(pytester: pytest.Pytester,
 
     run = pytester.runpytest_inprocess()
 
-    assert "{" not in run.stdout.str()
-    run.stdout.fnmatch_lines(["*1 passed*"])
+    # No summary at all, not even a human one: a worker's stdout is captured by the
+    # controller and read by nobody. The run is summarized once, on the controller.
+    assert run.stdout.str().strip() == ""
 
 
-def test_plugin_should_stay_silent_when_the_run_is_distributed(pytester: pytest.Pytester, agent: None) -> None:
-    pytester.makeconftest(
-        """
-        def pytest_configure(config):
-            config.option.dist = "load"
-        """
-    )
-    pytester.makepyfile(
-        """
-        def test_ok():
-            assert True
-        """
-    )
-
-    run = pytester.runpytest_inprocess()
-
-    assert "{" not in run.stdout.str()
-
-
-def test_plugin_should_stay_silent_under_real_xdist(pytester: pytest.Pytester, agent: None) -> None:
+def test_plugin_should_aggregate_worker_reports_under_real_xdist(pytester: pytest.Pytester, agent: None) -> None:
     pytester.makepyfile(
         """
         def test_one():
@@ -407,13 +389,72 @@ def test_plugin_should_stay_silent_under_real_xdist(pytester: pytest.Pytester, a
 
         def test_two():
             assert True
+
+
+        def test_three():
+            assert True
         """
     )
 
     run = pytester.runpytest_subprocess("-n", "2")
 
-    assert "{" not in run.stdout.str()
-    run.stdout.fnmatch_lines(["*2 passed*"])
+    # One line and nothing else. xdist writes its own status lines through the
+    # terminal reporter, so anything leaking here means we let it keep a handle.
+    assert len(run.stdout.str().strip().splitlines()) == 1
+    payload = payload_of(run.stdout.str())
+    assert payload["result"] == "passed"
+    assert payload["summary"] == {"collected": 3, "passed": 3}
+
+
+def test_plugin_should_describe_a_worker_failure_under_real_xdist(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile(
+        """
+        def test_ok():
+            assert True
+
+
+        def test_bad():
+            value = 401
+            assert value == 200
+        """
+    )
+
+    run = pytester.runpytest_subprocess("-n", "2")
+
+    # The report crosses a process boundary to get here. What matters is that the
+    # crash detail survives the trip, since it is the whole payload.
+    payload = payload_of(run.stdout.str())
+    assert payload["summary"] == {"collected": 2, "passed": 1, "failed": 1}
+    assert payload["failures"] == [
+        {
+            "nodeid": "test_plugin_should_describe_a_worker_failure_under_real_xdist.py::test_bad",
+            "phase": "call",
+            "file": "test_plugin_should_describe_a_worker_failure_under_real_xdist.py",
+            "line": 7,
+            "type": "AssertionError",
+            "message": "assert 401 == 200",
+        }
+    ]
+
+
+def test_plugin_should_describe_a_collection_error_under_real_xdist(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile(
+        """
+        import totally_missing_module
+
+
+        def test_never_runs():
+            assert True
+        """
+    )
+
+    run = pytester.runpytest_subprocess("-n", "2")
+
+    payload = payload_of(run.stdout.str())
+    assert payload["result"] == "failed"
+    assert payload["summary"] == {"error": 1}
+    assert payload["failures"][0]["type"] == "ModuleNotFoundError"
+    assert payload["failures"][0]["phase"] == "collect"
 
 
 # -- force hatch --

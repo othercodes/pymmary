@@ -16,19 +16,14 @@ _FAILED_OUTCOMES = ("failed", "error")
 PLUGIN_NAME = "pymmary-collector"
 
 
-def _is_distributed(config: pytest.Config) -> bool:
-    """True when pytest-xdist is doing the running.
+def _is_worker(config: pytest.Config) -> bool:
+    """True inside a pytest-xdist worker process.
 
-    Workers each build their own report stream and the controller never runs a test
-    itself, so our per-item collection sees nothing there and would emit a green
-    summary with zero tests in it. A wrong summary is worse than an uncompressed
-    one, so we stand down entirely.
-
-    ponytail: no-op under xdist; aggregate the worker streams if anyone asks.
+    A worker runs a slice of the suite and ships its reports to the controller,
+    where the run comes back together. Summarizing there would print one JSON line
+    per process, each counting a fraction of the run and none of them true.
     """
-    if hasattr(config, "workerinput"):
-        return True
-    return bool(config.getoption("dist", "no") != "no")
+    return hasattr(config, "workerinput")
 
 
 class Collector:
@@ -69,21 +64,29 @@ class Collector:
         print(render(result, max_failures=max_failures_from(os.environ)))
 
 
-@pytest.hookimpl(trylast=True)
+def pytest_plugin_registered(plugin: object, plugin_name: str, manager: pytest.PytestPluginManager) -> None:
+    """Drop the terminal reporter the instant it appears.
+
+    Own the terminal outright instead of muting the default reporter piecemeal:
+    unregistering is pytest's supported way to drop a plugin, and it leaves no
+    header, no progress line and no summary to leak around our JSON.
+
+    Here rather than in pytest_configure because that is what silences xdist too.
+    xdist looks the reporter up in its own configure hook and keeps a direct
+    reference, so a reporter still alive by then goes on writing status lines
+    around our output no matter how thoroughly we unregister it afterwards. Killed
+    on registration, there is nothing for xdist to find, and every one of its
+    `if self.terminal:` guards closes on its own.
+    """
+    if plugin_name == "terminalreporter" and is_agent_environment(os.environ) is not None:
+        manager.unregister(plugin)
+
+
 def pytest_configure(config: pytest.Config) -> None:
-    # trylast: the built-in reporter registers itself in its own pytest_configure,
-    # so running first would find nothing to unregister.
-    if is_agent_environment(os.environ) is None or _is_distributed(config):
+    if is_agent_environment(os.environ) is None or _is_worker(config):
         return
 
     config.pluginmanager.register(Collector(config), PLUGIN_NAME)
-
-    # Own the terminal outright instead of muting the default reporter piecemeal:
-    # unregistering is pytest's supported way to drop a plugin, and it leaves no
-    # header, no progress line and no summary to leak around our JSON.
-    reporter = config.pluginmanager.getplugin("terminalreporter")
-    if reporter is not None:
-        config.pluginmanager.unregister(reporter)
 
 
 def _build_result(
