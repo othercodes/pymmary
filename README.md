@@ -106,7 +106,7 @@ Tokens, not bytes, since tokens are what an agent pays for. On pytest output the
 
 Companion to [pyssertive](https://github.com/othercodes/pyssertive) (assert phase) and [pyrrange](https://github.com/othercodes/pyrrange) (arrange phase). Pymmary covers the report phase, for AI consumers.
 
-Inspired by [laravel/pao](https://github.com/laravel/pao), the PHP original. Pymmary keeps its envelope recognizable but speaks each tool's own vocabulary rather than PHPUnit's.
+Inspired by [laravel/pao](https://github.com/laravel/pao), the PHP original.
 
 ## License
 
