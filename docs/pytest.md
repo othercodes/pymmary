@@ -81,7 +81,7 @@ And inside a failure record:
 |---|---|
 | `nodeid` | Pasteable straight back into the CLI. The whole point, see below |
 | `phase` | `setup` / `call` / `teardown` / `collect`. A setup failure is a broken fixture, a collect failure means the file never imported, neither is broken test logic |
-| `file`, `line` | Where to look |
+| `file`, `line` | Where to look, always as a matching pair, and always the same place pytest prints as `path:lineno:`. When an assertion helper raised, that is the line in your file, not the line inside the helper's library |
 | `type`, `message` | The exception and its explanation, ANSI stripped |
 
 `summary` uses pytest's own outcome vocabulary: `collected`, `passed`, `failed`, `error`, `skipped`, `xfailed`, `xpassed`. `error` is kept distinct from `failed` because an error means the test never ran, and counting it as a failed assertion is a lie. An `xpassed` means something got fixed and nobody updated the marker.

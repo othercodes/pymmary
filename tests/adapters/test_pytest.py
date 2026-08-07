@@ -197,6 +197,114 @@ def test_plugin_should_report_the_line_of_the_failure(pytester: pytest.Pytester,
     assert payload["failures"][0]["line"] == 2
 
 
+def test_plugin_should_report_the_line_in_the_test_file_when_an_assertion_helper_raised(
+    pytester: pytest.Pytester, agent: None
+) -> None:
+    # unittest raises from inside its own case.py, so the crash is in the standard
+    # library while the line worth reading is here. Same for any project that wraps
+    # its assertions in a helper.
+    pytester.makepyfile(
+        """
+        import unittest
+
+
+        class TestAuth(unittest.TestCase):
+            def test_bad(self):
+                self.assertEqual(401, 200)
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["failures"][0]["line"] == 6
+
+
+def test_plugin_should_point_file_and_line_at_the_same_place(pytester: pytest.Pytester, agent: None) -> None:
+    # The two came from different sources and could contradict each other: a line
+    # number from the standard library against a file name from the test suite,
+    # naming a coordinate that does not exist.
+    pytester.makepyfile(
+        """
+        import unittest
+
+
+        class TestAuth(unittest.TestCase):
+            def test_bad(self):
+                self.assertEqual(401, 200)
+        """
+    )
+
+    failure = payload_of(pytester.runpytest_inprocess().stdout.str())["failures"][0]
+
+    source = pytester.path.joinpath(failure["file"])
+    assert source.exists()
+    assert len(source.read_text().splitlines()) >= failure["line"]
+
+
+def test_plugin_should_report_the_line_inside_a_failing_helper(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile(
+        """
+        def assert_status(actual, expected):
+            assert actual == expected
+
+
+        def test_bad():
+            assert_status(401, 200)
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["failures"][0]["line"] == 2
+
+
+def test_plugin_should_fall_back_to_the_crash_when_there_is_no_traceback(
+    pytester: pytest.Pytester, agent: None
+) -> None:
+    # --tb=no, --tb=line and --tb=native all render entries without a file location.
+    pytester.makepyfile(
+        """
+        def test_bad():
+            assert 401 == 200
+        """
+    )
+
+    failure = payload_of(pytester.runpytest_inprocess("--tb=native").stdout.str())["failures"][0]
+
+    assert failure["file"].endswith("test_plugin_should_fall_back_to_the_crash_when_there_is_no_traceback.py")
+    assert failure["line"] == 2
+
+
+def test_plugin_should_survive_a_longrepr_another_plugin_replaced(pytester: pytest.Pytester, agent: None) -> None:
+    # Plugins are allowed to overwrite longrepr, and a plain string has neither a
+    # traceback nor a crash to read. Losing the line is fine; crashing is not.
+    pytester.makeconftest(
+        """
+        import pytest
+
+
+        @pytest.hookimpl(wrapper=True)
+        def pytest_runtest_makereport(item):
+            report = yield
+            if report.failed:
+                report.longrepr = "something ate the traceback"
+            return report
+        """
+    )
+    pytester.makepyfile(
+        """
+        def test_bad():
+            assert 401 == 200
+        """
+    )
+
+    failure = payload_of(pytester.runpytest_inprocess().stdout.str())["failures"][0]
+
+    assert failure["file"] == "test_plugin_should_survive_a_longrepr_another_plugin_replaced.py"
+    assert failure["line"] == 0
+    assert failure["message"] == "something ate the traceback"
+
+
 def test_plugin_should_flag_a_setup_failure_as_such(pytester: pytest.Pytester, agent: None) -> None:
     pytester.makepyfile(
         """
