@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from pymmary.schema import Result
+from pymmary.schema import Failure, Result, WarningInfo
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
@@ -60,50 +60,49 @@ def render(result: Result, max_failures: int = DEFAULT_MAX_FAILURES) -> str:
     payload["duration"] = round(result.duration, _DURATION_PRECISION)
     payload["summary"] = {name: count for name, count in result.summary.items() if count}
 
-    _add_list(
-        payload,
-        "failures",
-        [
-            {
-                "nodeid": failure.nodeid,
-                "phase": failure.phase,
-                "file": failure.file,
-                "line": failure.line,
-                "type": failure.type,
-                "message": strip_ansi(failure.message),
-            }
-            for failure in result.failures
-        ],
-        max_failures,
-    )
-    _add_list(
-        payload,
-        "warnings",
-        [
-            {
-                "category": warning.category,
-                "file": warning.file,
-                "line": warning.line,
-                "message": strip_ansi(warning.message),
-            }
-            for warning in result.warnings
-        ],
-        max_failures,
-    )
+    _add_list(payload, "failures", result.failures, max_failures, _failure_entry)
+    _add_list(payload, "warnings", result.warnings, max_failures, _warning_entry)
 
     return json.dumps(payload, separators=(",", ":"))
 
 
-def _add_list(payload: dict[str, Any], key: str, entries: list[dict[str, Any]], cap: int) -> None:
+def _failure_entry(failure: Failure) -> dict[str, Any]:
+    return {
+        "nodeid": failure.nodeid,
+        "phase": failure.phase,
+        "file": failure.file,
+        "line": failure.line,
+        "type": failure.type,
+        "message": strip_ansi(failure.message),
+    }
+
+
+def _warning_entry(warning: WarningInfo) -> dict[str, Any]:
+    return {
+        "category": warning.category,
+        "file": warning.file,
+        "line": warning.line,
+        "message": strip_ansi(warning.message),
+    }
+
+
+def _add_list(
+    payload: dict[str, Any],
+    key: str,
+    items: Sequence[Any],
+    cap: int,
+    entry: Callable[[Any], dict[str, Any]],
+) -> None:
     """Attach a list of problems, capped, or leave the key out entirely.
 
+    Capped before the entries are built, so what the cap drops costs nothing.
     Warnings share the failure cap: same kind of list, and a second knob would be a
     second thing to explain.
     """
-    if not entries:
+    if not items:
         return
-    shown = entries if cap == 0 else entries[:cap]
-    payload[key] = shown
-    omitted = len(entries) - len(shown)
+    shown = items if cap == 0 else items[:cap]
+    payload[key] = [entry(item) for item in shown]
+    omitted = len(items) - len(shown)
     if omitted:
         payload[f"{key}_omitted"] = omitted

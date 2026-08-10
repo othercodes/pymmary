@@ -167,6 +167,18 @@ def test_render_should_strip_ansi_from_failure_messages() -> None:
     assert json.loads(render(result))["failures"][0]["message"] == "assert 1 == 2"
 
 
+def test_render_should_strip_ansi_from_warning_messages() -> None:
+    result = Result(
+        tool="pytest",
+        result="passed",
+        duration=0.1,
+        summary={"warnings": 1},
+        warnings=(WarningInfo(category="UserWarning", file="tests/test_x.py", line=1, message="\x1b[31mnoisy\x1b[0m"),),
+    )
+
+    assert json.loads(render(result))["warnings"][0]["message"] == "noisy"
+
+
 # -- warnings --
 
 

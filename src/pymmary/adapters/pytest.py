@@ -63,7 +63,7 @@ class Collector:
             WarningInfo(
                 category=warning_message.category.__name__,
                 file=_relative_to(warning_message.filename, self.config.rootpath),
-                line=int(warning_message.lineno),
+                line=warning_message.lineno,
                 message=str(warning_message.message),
             )
         ] = None
@@ -72,7 +72,7 @@ class Collector:
         result = _build_result(
             reports=self.reports,
             collect_errors=self.collect_errors,
-            warnings=tuple(self.warnings),
+            warned=tuple(self.warnings),
             collected=session.testscollected,
             exit_code=int(exitstatus),
             duration=time.perf_counter() - self.started,
@@ -116,7 +116,7 @@ def _relative_to(path: str, root: Path) -> str:
 def _build_result(
     reports: list[pytest.TestReport],
     collect_errors: list[pytest.CollectReport],
-    warnings: tuple[WarningInfo, ...],
+    warned: tuple[WarningInfo, ...],
     collected: int,
     exit_code: int,
     duration: float,
@@ -138,7 +138,7 @@ def _build_result(
         if outcome in _FAILED_OUTCOMES:
             failures.append(_failure_of(report))
 
-    summary = {"collected": collected, **counts, "warnings": len(warnings)}
+    summary = {"collected": collected, **counts, "warnings": len(warned)}
 
     return Result(
         tool="pytest",
@@ -150,7 +150,7 @@ def _build_result(
         summary=summary,
         exit_code=exit_code,
         failures=tuple(failures),
-        warnings=warnings,
+        warnings=warned,
     )
 
 
