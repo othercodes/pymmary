@@ -25,8 +25,9 @@ MAX_FAILURES_VARIABLE = "PYMMARY_MAX_FAILURES"
 MAX_CAPTURE_CHARS = 2000
 """How much of one captured stream survives, counted from the end.
 
-No knob: captured output is opt in already, and whoever turned it on wants the
-lines around the failure rather than the first page of a fixture's chatter.
+Per stream, so a failure carrying stdout, stderr and a log tops out at three times
+this. No knob: captured output is opt in already, and whoever turned it on wants
+the lines around the failure rather than the first page of a fixture's chatter.
 """
 
 
@@ -73,19 +74,8 @@ def render(result: Result, max_failures: int = DEFAULT_MAX_FAILURES) -> str:
     return json.dumps(payload, separators=(",", ":"))
 
 
-def _tail(text: str) -> str:
-    """Keep the end of a capture, which is the part nearest the failure.
-
-    Truncation announces itself in the value: a capture that quietly lost its first
-    five thousand characters is worse than no capture at all.
-    """
-    if len(text) <= MAX_CAPTURE_CHARS:
-        return text
-    return f"[{len(text) - MAX_CAPTURE_CHARS} characters omitted]\n{text[-MAX_CAPTURE_CHARS:]}"
-
-
 def _failure_entry(failure: Failure) -> dict[str, Any]:
-    entry = {
+    entry: dict[str, Any] = {
         "nodeid": failure.nodeid,
         "phase": failure.phase,
         "file": failure.file,
@@ -94,8 +84,14 @@ def _failure_entry(failure: Failure) -> dict[str, Any]:
         "message": strip_ansi(failure.message),
     }
     for name, captured in (("stdout", failure.stdout), ("stderr", failure.stderr), ("log", failure.log)):
-        if captured:
-            entry[name] = _tail(strip_ansi(captured))
+        if not captured:
+            continue
+        text = strip_ansi(captured)
+        # The tail is the part nearest the failure, and the count goes in its own
+        # key rather than into the text: what we emit stays what the test printed.
+        entry[name] = text[-MAX_CAPTURE_CHARS:]
+        if len(text) > MAX_CAPTURE_CHARS:
+            entry[f"{name}_omitted"] = len(text) - MAX_CAPTURE_CHARS
     return entry
 
 

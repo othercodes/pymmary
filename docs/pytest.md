@@ -86,6 +86,7 @@ And inside a failure record:
 | `file`, `line` | Where to look, always as a matching pair, and always the same place pytest prints as `path:lineno:`. When an assertion helper raised, that is the line in your file, not the line inside the helper's library |
 | `type`, `message` | The exception and its explanation, ANSI stripped |
 | `stdout`, `stderr`, `log` | What the test captured, only with `PYMMARY_CAPTURE=1` and only where there was something. See below |
+| `stdout_omitted`, `stderr_omitted`, `log_omitted` | Characters dropped from that stream. Absent when none were |
 
 `summary` uses pytest's own outcome vocabulary: `collected`, `passed`, `failed`, `error`, `skipped`, `xfailed`, `xpassed`. `error` is kept distinct from `failed` because an error means the test never ran, and counting it as a failed assertion is a lie. An `xpassed` means something got fixed and nobody updated the marker.
 
@@ -99,12 +100,7 @@ And inside a failure record:
 
 Off by default, because it is the most expensive thing pymmary can add: a single chatty test can outweigh the whole rest of the payload. Only the streams that captured something appear, and only on failures.
 
-Each stream keeps its last 2000 characters, the ones nearest the failure, and says so when it drops any:
-
-```
-[4821 characters omitted]
-...
-```
+Each stream keeps its last 2000 characters, the ones nearest the failure, so a failure carrying all three tops out at 6000. What it drops is counted in `stdout_omitted`, `stderr_omitted` and `log_omitted`, in characters, and those keys are absent when nothing was dropped. The count goes in its own key rather than into the text, so what you read under `stdout` is what the test printed and nothing else.
 
 ### Warnings
 

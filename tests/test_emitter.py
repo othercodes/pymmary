@@ -184,7 +184,7 @@ def test_render_should_emit_warnings() -> None:
     ]
 
 
-def a_failure_capturing(stdout: str) -> Result:
+def a_failure_capturing(stream: str, text: str) -> Result:
     return Result(
         tool="pytest",
         result="failed",
@@ -198,7 +198,7 @@ def a_failure_capturing(stdout: str) -> Result:
                 line=1,
                 type="AssertionError",
                 message="assert 0 == 1",
-                stdout=stdout,
+                **{stream: text},
             ),
         ),
     )
@@ -209,27 +209,34 @@ def test_render_should_omit_a_stream_that_captured_nothing(stream: str) -> None:
     assert stream not in json.loads(render(FAILING))["failures"][0]
 
 
-def test_render_should_keep_the_tail_of_a_long_capture() -> None:
-    stdout = "".join(f"line {index}\n" for index in range(2000))
+@pytest.mark.parametrize("stream", ["stdout", "stderr", "log"])
+def test_render_should_keep_the_tail_of_a_long_capture(stream: str) -> None:
+    text = "".join(f"line {index}\n" for index in range(2000))
 
-    emitted = json.loads(render(a_failure_capturing(stdout)))["failures"][0]["stdout"]
+    failure = json.loads(render(a_failure_capturing(stream, text)))["failures"][0]
 
-    assert emitted.endswith("line 1999\n")
-    assert len(emitted) < len(stdout)
+    assert failure[stream].endswith("line 1999\n")
+    assert len(failure[stream]) == MAX_CAPTURE_CHARS
 
 
-def test_render_should_say_how_much_of_a_capture_it_dropped() -> None:
-    stdout = "x" * 5000
+@pytest.mark.parametrize("stream", ["stdout", "stderr", "log"])
+def test_render_should_say_how_much_of_a_capture_it_dropped(stream: str) -> None:
+    failure = json.loads(render(a_failure_capturing(stream, "x" * 5000)))["failures"][0]
 
-    emitted = json.loads(render(a_failure_capturing(stdout)))["failures"][0]["stdout"]
+    assert failure[f"{stream}_omitted"] == 5000 - MAX_CAPTURE_CHARS
 
-    assert emitted.startswith(f"[{5000 - MAX_CAPTURE_CHARS} characters omitted]\n")
+
+def test_render_should_not_touch_the_captured_text_when_it_truncates() -> None:
+    failure = json.loads(render(a_failure_capturing("stdout", "x" * 5000)))["failures"][0]
+
+    assert set(failure["stdout"]) == {"x"}
 
 
 def test_render_should_leave_a_short_capture_whole() -> None:
-    emitted = json.loads(render(a_failure_capturing("two\nlines\n")))["failures"][0]["stdout"]
+    failure = json.loads(render(a_failure_capturing("stdout", "two\nlines\n")))["failures"][0]
 
-    assert emitted == "two\nlines\n"
+    assert failure["stdout"] == "two\nlines\n"
+    assert "stdout_omitted" not in failure
 
 
 @pytest.mark.parametrize("key", ["failures", "warnings"])
