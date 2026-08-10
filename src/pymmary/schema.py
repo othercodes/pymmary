@@ -18,6 +18,9 @@ class Failure:
     line: int
     type: str
     message: str
+    stdout: str = ""
+    stderr: str = ""
+    log: str = ""
 
 
 @dataclass(frozen=True)

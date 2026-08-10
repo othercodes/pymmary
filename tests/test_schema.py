@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pymmary.schema import Failure, Result
 
-# -- Result --
-
 
 def test_result_should_default_to_no_failures() -> None:
     result = Result(tool="pytest", result="passed", duration=0.32, summary={"collected": 1, "passed": 1})
@@ -26,9 +24,6 @@ def test_result_should_be_immutable() -> None:
         return
 
     raise AssertionError("Result should be frozen")
-
-
-# -- Failure --
 
 
 def test_failure_should_carry_the_nodeid_as_identity() -> None:

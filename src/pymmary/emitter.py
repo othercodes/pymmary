@@ -22,6 +22,14 @@ runs again, so failures 21 to 400 cost context and buy nothing. Raise it with
 
 MAX_FAILURES_VARIABLE = "PYMMARY_MAX_FAILURES"
 
+MAX_CAPTURE_CHARS = 2000
+"""How much of one captured stream survives, counted from the end.
+
+Per stream, so a failure carrying stdout, stderr and a log tops out at three times
+this. No knob: captured output is opt in already, and whoever turned it on wants
+the lines around the failure rather than the first page of a fixture's chatter.
+"""
+
 
 def strip_ansi(text: str) -> str:
     """Drop ANSI escape sequences. Colour codes are noise inside a JSON string."""
@@ -67,7 +75,7 @@ def render(result: Result, max_failures: int = DEFAULT_MAX_FAILURES) -> str:
 
 
 def _failure_entry(failure: Failure) -> dict[str, Any]:
-    return {
+    entry: dict[str, Any] = {
         "nodeid": failure.nodeid,
         "phase": failure.phase,
         "file": failure.file,
@@ -75,6 +83,16 @@ def _failure_entry(failure: Failure) -> dict[str, Any]:
         "type": failure.type,
         "message": strip_ansi(failure.message),
     }
+    for name, captured in (("stdout", failure.stdout), ("stderr", failure.stderr), ("log", failure.log)):
+        if not captured:
+            continue
+        text = strip_ansi(captured)
+        # The tail is the part nearest the failure, and the count goes in its own
+        # key rather than into the text: what we emit stays what the test printed.
+        entry[name] = text[-MAX_CAPTURE_CHARS:]
+        if len(text) > MAX_CAPTURE_CHARS:
+            entry[f"{name}_omitted"] = len(text) - MAX_CAPTURE_CHARS
+    return entry
 
 
 def _warning_entry(warning: WarningInfo) -> dict[str, Any]:
