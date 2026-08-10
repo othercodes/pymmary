@@ -21,6 +21,20 @@ class Failure:
 
 
 @dataclass(frozen=True)
+class WarningInfo:
+    """Something the tool wants noticed without calling the run a failure.
+
+    No ``nodeid``: a warning belongs to the code at ``file:line``, not to whichever
+    tests happened to reach it.
+    """
+
+    category: str
+    file: str
+    line: int
+    message: str
+
+
+@dataclass(frozen=True)
 class Result:
     """What an adapter hands to the emitter.
 
@@ -35,3 +49,4 @@ class Result:
     summary: Mapping[str, int]
     exit_code: int | None = None
     failures: tuple[Failure, ...] = field(default=())
+    warnings: tuple[WarningInfo, ...] = field(default=())

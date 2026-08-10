@@ -74,6 +74,8 @@ On top of the four envelope keys every adapter emits:
 | `exit_code` | `pytest.ExitCode`, which already distinguishes `OK`, `TESTS_FAILED`, `INTERRUPTED`, `INTERNAL_ERROR`, `USAGE_ERROR` and `NO_TESTS_COLLECTED` |
 | `failures` | One record per failure, capped by `PYMMARY_MAX_FAILURES`. Absent entirely on a green run |
 | `failures_omitted` | How many failures the cap left out. Absent when it left out none |
+| `warnings` | One record per distinct warning, same cap. Absent when the run warned about nothing. See below |
+| `warnings_omitted` | How many warnings the cap left out |
 
 And inside a failure record:
 
@@ -85,6 +87,20 @@ And inside a failure record:
 | `type`, `message` | The exception and its explanation, ANSI stripped |
 
 `summary` uses pytest's own outcome vocabulary: `collected`, `passed`, `failed`, `error`, `skipped`, `xfailed`, `xpassed`. `error` is kept distinct from `failed` because an error means the test never ran, and counting it as a failed assertion is a lie. An `xpassed` means something got fixed and nobody updated the marker.
+
+### Warnings
+
+A run that passes while warning about something is not silent:
+
+```json
+{"tool":"pytest","result":"passed","exit_code":0,"duration":0.32,"summary":{"collected":5,"passed":5,"warnings":2},"warnings":[{"category":"DeprecationWarning","file":"db/client.py","line":88,"message":"connect() is deprecated, use open()"}]}
+```
+
+A warning has no `nodeid`, because it belongs to the code at `file:line` rather than to whichever tests happened to reach it. Identical warnings are collapsed into one record, and `summary.warnings` counts the distinct ones.
+
+That is a deliberate divergence from pytest, which counts occurrences. Pytest's own number is not stable: one module-level deprecation and one raised by three parametrized tests makes pytest report `4 warnings` serially and `5 warnings` under `-n 2`, because every worker collects the whole suite. Counting distinct warnings gives the same answer in both, and matches the number of things there are to fix.
+
+Warnings you have filtered out in your pytest configuration never reach pymmary, so `filterwarnings` keeps working exactly as it did.
 
 ### nodeid is the point
 

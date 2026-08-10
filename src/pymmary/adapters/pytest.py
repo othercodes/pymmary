@@ -3,13 +3,15 @@ from __future__ import annotations
 import os
 import re
 import time
+import warnings
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
 from pymmary.detector import is_agent_environment
 from pymmary.emitter import max_failures_from, render
-from pymmary.schema import Failure, Result
+from pymmary.schema import Failure, Result, WarningInfo
 
 _FAILED_OUTCOMES = ("failed", "error")
 
@@ -39,6 +41,9 @@ class Collector:
         self.config = config
         self.reports: list[pytest.TestReport] = []
         self.collect_errors: list[pytest.CollectReport] = []
+        # Keyed rather than appended: pytest fires the warning hook once per
+        # occurrence, and under xdist once per worker on top of that.
+        self.warnings: dict[WarningInfo, None] = {}
         self.started = 0.0
 
     def pytest_sessionstart(self) -> None:
@@ -53,10 +58,21 @@ class Collector:
         if report.failed:
             self.collect_errors.append(report)
 
+    def pytest_warning_recorded(self, warning_message: warnings.WarningMessage) -> None:
+        self.warnings[
+            WarningInfo(
+                category=warning_message.category.__name__,
+                file=_relative_to(warning_message.filename, self.config.rootpath),
+                line=warning_message.lineno,
+                message=str(warning_message.message),
+            )
+        ] = None
+
     def pytest_sessionfinish(self, session: pytest.Session, exitstatus: int) -> None:
         result = _build_result(
             reports=self.reports,
             collect_errors=self.collect_errors,
+            warned=tuple(self.warnings),
             collected=session.testscollected,
             exit_code=int(exitstatus),
             duration=time.perf_counter() - self.started,
@@ -89,9 +105,18 @@ def pytest_configure(config: pytest.Config) -> None:
     config.pluginmanager.register(Collector(config), PLUGIN_NAME)
 
 
+def _relative_to(path: str, root: Path) -> str:
+    """Match how failures are reported. A dependency's file has no useful relative form."""
+    try:
+        return str(Path(path).relative_to(root))
+    except ValueError:
+        return path
+
+
 def _build_result(
     reports: list[pytest.TestReport],
     collect_errors: list[pytest.CollectReport],
+    warned: tuple[WarningInfo, ...],
     collected: int,
     exit_code: int,
     duration: float,
@@ -113,7 +138,7 @@ def _build_result(
         if outcome in _FAILED_OUTCOMES:
             failures.append(_failure_of(report))
 
-    summary = {"collected": collected, **counts}
+    summary = {"collected": collected, **counts, "warnings": len(warned)}
 
     return Result(
         tool="pytest",
@@ -125,6 +150,7 @@ def _build_result(
         summary=summary,
         exit_code=exit_code,
         failures=tuple(failures),
+        warnings=warned,
     )
 
 
