@@ -60,9 +60,10 @@ def render(result: Result, max_failures: int = DEFAULT_MAX_FAILURES) -> str:
     payload["duration"] = round(result.duration, _DURATION_PRECISION)
     payload["summary"] = {name: count for name, count in result.summary.items() if count}
 
-    if result.failures:
-        shown = result.failures if max_failures == 0 else result.failures[:max_failures]
-        payload["failures"] = [
+    _add_list(
+        payload,
+        "failures",
+        [
             {
                 "nodeid": failure.nodeid,
                 "phase": failure.phase,
@@ -71,10 +72,38 @@ def render(result: Result, max_failures: int = DEFAULT_MAX_FAILURES) -> str:
                 "type": failure.type,
                 "message": strip_ansi(failure.message),
             }
-            for failure in shown
-        ]
-        omitted = len(result.failures) - len(shown)
-        if omitted:
-            payload["failures_omitted"] = omitted
+            for failure in result.failures
+        ],
+        max_failures,
+    )
+    _add_list(
+        payload,
+        "warnings",
+        [
+            {
+                "category": warning.category,
+                "file": warning.file,
+                "line": warning.line,
+                "message": strip_ansi(warning.message),
+            }
+            for warning in result.warnings
+        ],
+        max_failures,
+    )
 
     return json.dumps(payload, separators=(",", ":"))
+
+
+def _add_list(payload: dict[str, Any], key: str, entries: list[dict[str, Any]], cap: int) -> None:
+    """Attach a list of problems, capped, or leave the key out entirely.
+
+    Warnings share the failure cap: same kind of list, and a second knob would be a
+    second thing to explain.
+    """
+    if not entries:
+        return
+    shown = entries if cap == 0 else entries[:cap]
+    payload[key] = shown
+    omitted = len(entries) - len(shown)
+    if omitted:
+        payload[f"{key}_omitted"] = omitted

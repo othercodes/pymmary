@@ -464,6 +464,118 @@ def test_plugin_should_not_call_an_empty_run_a_pass(pytester: pytest.Pytester, a
     assert payload["exit_code"] == 5
 
 
+# -- warnings --
+
+
+@pytest.mark.parametrize(
+    ("category", "expected"),
+    [("DeprecationWarning", "DeprecationWarning"), ("UserWarning", "UserWarning")],
+)
+def test_plugin_should_describe_a_warning(pytester: pytest.Pytester, agent: None, category: str, expected: str) -> None:
+    pytester.makepyfile(
+        f"""
+        import warnings
+
+
+        def test_ok():
+            warnings.warn("connect() is deprecated", {category})
+            assert True
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["summary"]["warnings"] == 1
+    assert payload["warnings"] == [
+        {
+            "category": expected,
+            "file": "test_plugin_should_describe_a_warning.py",
+            "line": 5,
+            "message": "connect() is deprecated",
+        }
+    ]
+
+
+def test_plugin_should_keep_an_absolute_path_when_the_warning_comes_from_outside(
+    pytester: pytest.Pytester, agent: None
+) -> None:
+    # A deprecation raised inside an installed dependency has no relative form worth
+    # printing. warn_explicit sets the filename, which is otherwise the caller's.
+    pytester.makepyfile(
+        """
+        import warnings
+
+
+        def test_ok():
+            warnings.warn_explicit("old api", DeprecationWarning, "/opt/lib/client.py", 42)
+            assert True
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["warnings"][0]["file"] == "/opt/lib/client.py"
+    assert payload["warnings"][0]["line"] == 42
+
+
+def test_plugin_should_collapse_a_warning_repeated_across_tests(pytester: pytest.Pytester, agent: None) -> None:
+    # pytest fires the hook once per occurrence and counts every one of them. One
+    # deprecation hit by thirty tests is one thing to fix, not thirty.
+    pytester.makepyfile(
+        """
+        import warnings
+        import pytest
+
+
+        @pytest.mark.parametrize("value", [1, 2, 3])
+        def test_ok(value):
+            warnings.warn("connect() is deprecated", DeprecationWarning)
+            assert value
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["summary"]["warnings"] == 1
+    assert len(payload["warnings"]) == 1
+
+
+def test_plugin_should_report_a_warning_raised_while_collecting(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile(
+        """
+        import warnings
+
+        warnings.warn("module level deprecation", DeprecationWarning)
+
+
+        def test_ok():
+            assert True
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["warnings"][0]["message"] == "module level deprecation"
+
+
+def test_plugin_should_keep_a_green_run_green_when_it_warns(pytester: pytest.Pytester, agent: None) -> None:
+    pytester.makepyfile(
+        """
+        import warnings
+
+
+        def test_ok():
+            warnings.warn("noisy", DeprecationWarning)
+            assert True
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert payload["result"] == "passed"
+    assert "failures" not in payload
+
+
 # -- xdist --
 
 
@@ -543,6 +655,32 @@ def test_plugin_should_describe_a_worker_failure_under_real_xdist(pytester: pyte
             "message": "assert 401 == 200",
         }
     ]
+
+
+def test_plugin_should_count_a_warning_once_under_real_xdist(pytester: pytest.Pytester, agent: None) -> None:
+    # Every worker collects the whole suite, so a module-level warning is recorded
+    # once per worker. pytest's own footer says 4 warnings serial and 5 under -n 2
+    # for the same code; ours has to say the same thing in both.
+    pytester.makepyfile(
+        """
+        import warnings
+
+        warnings.warn("module level deprecation", DeprecationWarning)
+
+
+        def test_one():
+            assert True
+
+
+        def test_two():
+            assert True
+        """
+    )
+
+    payload = payload_of(pytester.runpytest_subprocess("-n", "2").stdout.str())
+
+    assert payload["summary"]["warnings"] == 1
+    assert len(payload["warnings"]) == 1
 
 
 def test_plugin_should_describe_a_collection_error_under_real_xdist(pytester: pytest.Pytester, agent: None) -> None:

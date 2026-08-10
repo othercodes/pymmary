@@ -24,7 +24,7 @@ Each tool gets its own adapter, its own extra, and its own page. The payload spe
 |---|---|---|
 | pytest | `pymmary[pytest]` | [pytest adapter](https://github.com/othercodes/pymmary/blob/master/docs/pytest.md) |
 
-Planned: mypy, then unittest.
+Planned: unittest.
 
 ## Features
 
@@ -94,7 +94,7 @@ Two environment variables, no config file and no CLI flags:
 | Variable | Effect |
 |---|---|
 | `PYMMARY_FORCE=1` | Compress even when no agent is detected, useful to see what an agent sees |
-| `PYMMARY_MAX_FAILURES=N` | How many problems to spell out. Default 20; `0` keeps every one of them |
+| `PYMMARY_MAX_FAILURES=N` | How many problems to spell out, failures and warnings alike. Default 20; `0` keeps every one of them |
 
 The cap is about diminishing returns, not size: an agent facing 400 failures fixes a handful and runs again, so the rest cost context and buy nothing. `summary` always counts the whole run, and whatever was left out is declared in `failures_omitted`.
 

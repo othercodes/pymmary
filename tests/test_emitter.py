@@ -5,7 +5,7 @@ import json
 import pytest
 
 from pymmary.emitter import DEFAULT_MAX_FAILURES, max_failures_from, render, strip_ansi
-from pymmary.schema import Failure, Result
+from pymmary.schema import Failure, Result, WarningInfo
 
 
 def a_failure(index: int) -> Failure:
@@ -27,6 +27,25 @@ def a_failing_result(count: int) -> Result:
         summary={"collected": count, "failed": count},
         exit_code=1,
         failures=tuple(a_failure(index) for index in range(count)),
+    )
+
+
+def a_warning_result(count: int) -> Result:
+    return Result(
+        tool="pytest",
+        result="passed",
+        duration=0.1,
+        summary={"collected": 1, "passed": 1, "warnings": count},
+        exit_code=0,
+        warnings=tuple(
+            WarningInfo(
+                category="DeprecationWarning",
+                file="tests/test_bulk.py",
+                line=index,
+                message=f"thing_{index}() is deprecated",
+            )
+            for index in range(count)
+        ),
     )
 
 
@@ -90,8 +109,9 @@ def test_render_should_omit_zero_valued_counts() -> None:
     assert json.loads(render(result))["summary"] == {"collected": 3, "passed": 3}
 
 
-def test_render_should_omit_failures_when_the_run_is_green() -> None:
-    assert "failures" not in json.loads(render(PASSING))
+@pytest.mark.parametrize("key", ["failures", "warnings"])
+def test_render_should_omit_an_empty_list_rather_than_emit_it(key: str) -> None:
+    assert key not in json.loads(render(PASSING))
 
 
 def test_render_should_omit_exit_code_when_the_adapter_has_none() -> None:
@@ -147,19 +167,33 @@ def test_render_should_strip_ansi_from_failure_messages() -> None:
     assert json.loads(render(result))["failures"][0]["message"] == "assert 1 == 2"
 
 
-# -- failure cap --
+# -- warnings --
 
 
-def test_render_should_cap_failures_at_the_default() -> None:
-    payload = json.loads(render(a_failing_result(400)))
+def test_render_should_emit_warnings() -> None:
+    warnings = json.loads(render(a_warning_result(1)))["warnings"]
 
-    assert len(payload["failures"]) == DEFAULT_MAX_FAILURES
+    assert warnings == [
+        {
+            "category": "DeprecationWarning",
+            "file": "tests/test_bulk.py",
+            "line": 0,
+            "message": "thing_0() is deprecated",
+        }
+    ]
 
 
-def test_render_should_say_how_many_failures_it_omitted() -> None:
-    payload = json.loads(render(a_failing_result(400)))
+# -- caps --
 
-    assert payload["failures_omitted"] == 400 - DEFAULT_MAX_FAILURES
+
+@pytest.mark.parametrize("key", ["failures", "warnings"])
+def test_render_should_cap_a_list_and_say_what_it_dropped(key: str) -> None:
+    result = a_failing_result(400) if key == "failures" else a_warning_result(400)
+
+    payload = json.loads(render(result))
+
+    assert len(payload[key]) == DEFAULT_MAX_FAILURES
+    assert payload[f"{key}_omitted"] == 400 - DEFAULT_MAX_FAILURES
 
 
 def test_render_should_keep_the_full_count_in_the_summary_when_capping() -> None:
