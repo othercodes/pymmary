@@ -4,8 +4,6 @@ import pytest
 
 from pymmary.detector import AgentInfo, is_agent_environment
 
-# -- no agent --
-
 
 def test_is_agent_environment_should_return_none_for_empty_environment() -> None:
     assert is_agent_environment({}) is None
@@ -17,9 +15,6 @@ def test_is_agent_environment_should_return_none_for_plain_shell() -> None:
 
 def test_is_agent_environment_should_return_none_for_generic_ci() -> None:
     assert is_agent_environment({"CI": "true", "GITHUB_ACTIONS": "true"}) is None
-
-
-# -- known agents --
 
 
 @pytest.mark.parametrize(
@@ -50,9 +45,6 @@ def test_is_agent_environment_should_ignore_empty_value(key: str) -> None:
     assert is_agent_environment({key: ""}) is None
 
 
-# -- force hatch --
-
-
 def test_is_agent_environment_should_detect_forced_mode() -> None:
     assert is_agent_environment({"PYMMARY_FORCE": "1"}) == AgentInfo(name="forced")
 
@@ -63,9 +55,6 @@ def test_is_agent_environment_should_prefer_forced_mode_over_a_real_agent() -> N
 
 def test_is_agent_environment_should_ignore_forced_mode_when_not_set_to_one() -> None:
     assert is_agent_environment({"PYMMARY_FORCE": "0"}) is None
-
-
-# -- purity --
 
 
 def test_is_agent_environment_should_not_read_the_real_environment(monkeypatch: pytest.MonkeyPatch) -> None:

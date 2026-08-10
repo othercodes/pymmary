@@ -75,8 +75,6 @@ FAILING = Result(
     ),
 )
 
-# -- envelope --
-
 
 def test_render_should_emit_the_shared_envelope() -> None:
     payload = json.loads(render(PASSING))
@@ -93,9 +91,6 @@ def test_render_should_emit_a_single_line() -> None:
 
 def test_render_should_emit_valid_json() -> None:
     assert json.loads(render(FAILING))["result"] == "failed"
-
-
-# -- compression rules --
 
 
 def test_render_should_omit_zero_valued_counts() -> None:
@@ -132,9 +127,6 @@ def test_render_should_round_the_duration() -> None:
     result = Result(tool="pytest", result="passed", duration=0.3200000000001, summary={"passed": 1})
 
     assert json.loads(render(result))["duration"] == 0.32
-
-
-# -- failures --
 
 
 def test_render_should_emit_failures_keyed_by_nodeid() -> None:
@@ -179,9 +171,6 @@ def test_render_should_strip_ansi_from_warning_messages() -> None:
     assert json.loads(render(result))["warnings"][0]["message"] == "noisy"
 
 
-# -- warnings --
-
-
 def test_render_should_emit_warnings() -> None:
     warnings = json.loads(render(a_warning_result(1)))["warnings"]
 
@@ -193,9 +182,6 @@ def test_render_should_emit_warnings() -> None:
             "message": "thing_0() is deprecated",
         }
     ]
-
-
-# -- captured output --
 
 
 def a_failure_capturing(stdout: str) -> Result:
@@ -246,9 +232,6 @@ def test_render_should_leave_a_short_capture_whole() -> None:
     assert emitted == "two\nlines\n"
 
 
-# -- caps --
-
-
 @pytest.mark.parametrize("key", ["failures", "warnings"])
 def test_render_should_cap_a_list_and_say_what_it_dropped(key: str) -> None:
     result = a_failing_result(400) if key == "failures" else a_warning_result(400)
@@ -289,9 +272,6 @@ def test_render_should_honour_an_explicit_cap() -> None:
     assert payload["failures_omitted"] == 395
 
 
-# -- max_failures_from --
-
-
 def test_max_failures_from_should_default_when_unset() -> None:
     assert max_failures_from({}) == DEFAULT_MAX_FAILURES
 
@@ -307,9 +287,6 @@ def test_max_failures_from_should_accept_zero_as_uncapped() -> None:
 @pytest.mark.parametrize("value", ["", "abc", "-1", "3.5"])
 def test_max_failures_from_should_fall_back_on_a_bad_value(value: str) -> None:
     assert max_failures_from({"PYMMARY_MAX_FAILURES": value}) == DEFAULT_MAX_FAILURES
-
-
-# -- strip_ansi --
 
 
 def test_strip_ansi_should_remove_colour_codes() -> None:

@@ -25,9 +25,6 @@ def payload_of(stdout: str) -> dict:
     return json.loads(stdout.strip())
 
 
-# -- no agent: strict no-op --
-
-
 def test_plugin_should_leave_output_untouched_when_no_agent_is_detected(
     pytester: pytest.Pytester, no_agent: None
 ) -> None:
@@ -55,9 +52,6 @@ def test_plugin_should_not_emit_json_when_no_agent_is_detected(pytester: pytest.
     run = pytester.runpytest_inprocess()
 
     assert "{" not in run.stdout.str()
-
-
-# -- agent: compressed output --
 
 
 def test_plugin_should_replace_the_report_with_a_single_json_line(pytester: pytest.Pytester, agent: None) -> None:
@@ -200,9 +194,8 @@ def test_plugin_should_report_the_line_of_the_failure(pytester: pytest.Pytester,
 def test_plugin_should_report_the_line_in_the_test_file_when_an_assertion_helper_raised(
     pytester: pytest.Pytester, agent: None
 ) -> None:
-    # unittest raises from inside its own case.py, so the crash is in the standard
-    # library while the line worth reading is here. Same for any project that wraps
-    # its assertions in a helper.
+    # unittest raises from inside its own case.py, so the crash lands in the
+    # standard library while the line worth reading is here.
     pytester.makepyfile(
         """
         import unittest
@@ -220,9 +213,7 @@ def test_plugin_should_report_the_line_in_the_test_file_when_an_assertion_helper
 
 
 def test_plugin_should_point_file_and_line_at_the_same_place(pytester: pytest.Pytester, agent: None) -> None:
-    # The two came from different sources and could contradict each other: a line
-    # number from the standard library against a file name from the test suite,
-    # naming a coordinate that does not exist.
+    # They came from different sources, and named coordinates that did not exist.
     pytester.makepyfile(
         """
         import unittest
@@ -276,8 +267,8 @@ def test_plugin_should_fall_back_to_the_crash_when_there_is_no_traceback(
 
 
 def test_plugin_should_survive_a_longrepr_another_plugin_replaced(pytester: pytest.Pytester, agent: None) -> None:
-    # Plugins are allowed to overwrite longrepr, and a plain string has neither a
-    # traceback nor a crash to read. Losing the line is fine; crashing is not.
+    # A plain string has neither a traceback nor a crash to read. Losing the line
+    # is fine; crashing is not.
     pytester.makeconftest(
         """
         import pytest
@@ -401,9 +392,6 @@ def test_plugin_should_report_no_tests_collected(pytester: pytest.Pytester, agen
     assert payload["summary"] == {}
 
 
-# -- collection errors: the suite never ran --
-
-
 def test_plugin_should_not_call_a_collection_error_a_pass(pytester: pytest.Pytester, agent: None) -> None:
     pytester.makepyfile(
         """
@@ -462,9 +450,6 @@ def test_plugin_should_not_call_an_empty_run_a_pass(pytester: pytest.Pytester, a
 
     assert payload["result"] == "failed"
     assert payload["exit_code"] == 5
-
-
-# -- captured output --
 
 
 _NOISY_TEST = """
@@ -536,9 +521,6 @@ def test_plugin_should_carry_captured_output_across_real_xdist(
     assert "connecting to db://prod" in failure["stdout"]
 
 
-# -- warnings --
-
-
 @pytest.mark.parametrize(
     ("category", "expected"),
     [("DeprecationWarning", "DeprecationWarning"), ("UserWarning", "UserWarning")],
@@ -571,8 +553,7 @@ def test_plugin_should_describe_a_warning(pytester: pytest.Pytester, agent: None
 def test_plugin_should_keep_an_absolute_path_when_the_warning_comes_from_outside(
     pytester: pytest.Pytester, agent: None
 ) -> None:
-    # A deprecation raised inside an installed dependency has no relative form worth
-    # printing. warn_explicit sets the filename, which is otherwise the caller's.
+    # warn_explicit sets the filename, which is otherwise the caller's.
     pytester.makepyfile(
         """
         import warnings
@@ -591,8 +572,7 @@ def test_plugin_should_keep_an_absolute_path_when_the_warning_comes_from_outside
 
 
 def test_plugin_should_collapse_a_warning_repeated_across_tests(pytester: pytest.Pytester, agent: None) -> None:
-    # pytest fires the hook once per occurrence and counts every one of them. One
-    # deprecation hit by thirty tests is one thing to fix, not thirty.
+    # pytest fires the hook once per occurrence and counts every one of them.
     pytester.makepyfile(
         """
         import warnings
@@ -648,9 +628,6 @@ def test_plugin_should_keep_a_green_run_green_when_it_warns(pytester: pytest.Pyt
     assert "failures" not in payload
 
 
-# -- xdist --
-
-
 def test_plugin_should_stay_silent_on_an_xdist_worker(pytester: pytest.Pytester, agent: None) -> None:
     pytester.makeconftest(
         """
@@ -667,8 +644,7 @@ def test_plugin_should_stay_silent_on_an_xdist_worker(pytester: pytest.Pytester,
 
     run = pytester.runpytest_inprocess()
 
-    # No summary at all, not even a human one: a worker's stdout is captured by the
-    # controller and read by nobody. The run is summarized once, on the controller.
+    # Not even a human report: a worker's stdout is read by nobody.
     assert run.stdout.str().strip() == ""
 
 
@@ -690,8 +666,8 @@ def test_plugin_should_aggregate_worker_reports_under_real_xdist(pytester: pytes
 
     run = pytester.runpytest_subprocess("-n", "2")
 
-    # One line and nothing else. xdist writes its own status lines through the
-    # terminal reporter, so anything leaking here means we let it keep a handle.
+    # xdist writes its own status lines through the terminal reporter, so anything
+    # leaking here means we let it keep a handle.
     assert len(run.stdout.str().strip().splitlines()) == 1
     payload = payload_of(run.stdout.str())
     assert payload["result"] == "passed"
@@ -713,8 +689,6 @@ def test_plugin_should_describe_a_worker_failure_under_real_xdist(pytester: pyte
 
     run = pytester.runpytest_subprocess("-n", "2")
 
-    # The report crosses a process boundary to get here. What matters is that the
-    # crash detail survives the trip, since it is the whole payload.
     payload = payload_of(run.stdout.str())
     assert payload["summary"] == {"collected": 2, "passed": 1, "failed": 1}
     assert payload["failures"] == [
@@ -773,9 +747,6 @@ def test_plugin_should_describe_a_collection_error_under_real_xdist(pytester: py
     assert payload["summary"] == {"error": 1}
     assert payload["failures"][0]["type"] == "ModuleNotFoundError"
     assert payload["failures"][0]["phase"] == "collect"
-
-
-# -- force hatch --
 
 
 def test_plugin_should_compress_when_forced_without_an_agent(
