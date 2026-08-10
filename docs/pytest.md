@@ -102,19 +102,6 @@ That is a deliberate divergence from pytest, which counts occurrences. Pytest's 
 
 Warnings you have filtered out in your pytest configuration never reach pymmary, so `filterwarnings` keeps working exactly as it did.
 
-Reporting them is not free, so it was measured. The first warning costs 42 tokens here against pytest's 125, since pytest's block carries a section header, the offending source line and a link to its documentation; each further distinct warning costs 34 against 90:
-
-| Scenario | pytest | pymmary | Saving |
-|---|---:|---:|---:|
-| green, no warnings | 158 | 31 | 5.1× |
-| green, 1 warning | 281 | 73 | 3.8× |
-| green, 1 warning across 50 tests | 281 | 73 | 3.8× |
-| green, 5 warnings across 20 tests | 646 | 209 | 3.1× |
-| 3 failures, no warnings | 354 | 166 | 2.1× |
-| 3 failures and 5 warnings | 850 | 344 | 2.5× |
-
-The floor does not move: it is still the failure-heavy run with no warnings in it. Where there are failures, adding warnings raises the ratio rather than lowering it.
-
 ### nodeid is the point
 
 ```bash
