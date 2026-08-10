@@ -22,6 +22,13 @@ runs again, so failures 21 to 400 cost context and buy nothing. Raise it with
 
 MAX_FAILURES_VARIABLE = "PYMMARY_MAX_FAILURES"
 
+MAX_CAPTURE_CHARS = 2000
+"""How much of one captured stream survives, counted from the end.
+
+No knob: captured output is opt in already, and whoever turned it on wants the
+lines around the failure rather than the first page of a fixture's chatter.
+"""
+
 
 def strip_ansi(text: str) -> str:
     """Drop ANSI escape sequences. Colour codes are noise inside a JSON string."""
@@ -66,8 +73,19 @@ def render(result: Result, max_failures: int = DEFAULT_MAX_FAILURES) -> str:
     return json.dumps(payload, separators=(",", ":"))
 
 
+def _tail(text: str) -> str:
+    """Keep the end of a capture, which is the part nearest the failure.
+
+    Truncation announces itself in the value: a capture that quietly lost its first
+    five thousand characters is worse than no capture at all.
+    """
+    if len(text) <= MAX_CAPTURE_CHARS:
+        return text
+    return f"[{len(text) - MAX_CAPTURE_CHARS} characters omitted]\n{text[-MAX_CAPTURE_CHARS:]}"
+
+
 def _failure_entry(failure: Failure) -> dict[str, Any]:
-    return {
+    entry = {
         "nodeid": failure.nodeid,
         "phase": failure.phase,
         "file": failure.file,
@@ -75,6 +93,10 @@ def _failure_entry(failure: Failure) -> dict[str, Any]:
         "type": failure.type,
         "message": strip_ansi(failure.message),
     }
+    for name, captured in (("stdout", failure.stdout), ("stderr", failure.stderr), ("log", failure.log)):
+        if captured:
+            entry[name] = _tail(strip_ansi(captured))
+    return entry
 
 
 def _warning_entry(warning: WarningInfo) -> dict[str, Any]:

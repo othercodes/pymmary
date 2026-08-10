@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from pymmary.emitter import DEFAULT_MAX_FAILURES, max_failures_from, render, strip_ansi
+from pymmary.emitter import DEFAULT_MAX_FAILURES, MAX_CAPTURE_CHARS, max_failures_from, render, strip_ansi
 from pymmary.schema import Failure, Result, WarningInfo
 
 
@@ -193,6 +193,57 @@ def test_render_should_emit_warnings() -> None:
             "message": "thing_0() is deprecated",
         }
     ]
+
+
+# -- captured output --
+
+
+def a_failure_capturing(stdout: str) -> Result:
+    return Result(
+        tool="pytest",
+        result="failed",
+        duration=0.1,
+        summary={"failed": 1},
+        failures=(
+            Failure(
+                nodeid="tests/test_x.py::test_y",
+                phase="call",
+                file="tests/test_x.py",
+                line=1,
+                type="AssertionError",
+                message="assert 0 == 1",
+                stdout=stdout,
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize("stream", ["stdout", "stderr", "log"])
+def test_render_should_omit_a_stream_that_captured_nothing(stream: str) -> None:
+    assert stream not in json.loads(render(FAILING))["failures"][0]
+
+
+def test_render_should_keep_the_tail_of_a_long_capture() -> None:
+    stdout = "".join(f"line {index}\n" for index in range(2000))
+
+    emitted = json.loads(render(a_failure_capturing(stdout)))["failures"][0]["stdout"]
+
+    assert emitted.endswith("line 1999\n")
+    assert len(emitted) < len(stdout)
+
+
+def test_render_should_say_how_much_of_a_capture_it_dropped() -> None:
+    stdout = "x" * 5000
+
+    emitted = json.loads(render(a_failure_capturing(stdout)))["failures"][0]["stdout"]
+
+    assert emitted.startswith(f"[{5000 - MAX_CAPTURE_CHARS} characters omitted]\n")
+
+
+def test_render_should_leave_a_short_capture_whole() -> None:
+    emitted = json.loads(render(a_failure_capturing("two\nlines\n")))["failures"][0]["stdout"]
+
+    assert emitted == "two\nlines\n"
 
 
 # -- caps --

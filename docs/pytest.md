@@ -85,8 +85,26 @@ And inside a failure record:
 | `phase` | `setup` / `call` / `teardown` / `collect`. A setup failure is a broken fixture, a collect failure means the file never imported, neither is broken test logic |
 | `file`, `line` | Where to look, always as a matching pair, and always the same place pytest prints as `path:lineno:`. When an assertion helper raised, that is the line in your file, not the line inside the helper's library |
 | `type`, `message` | The exception and its explanation, ANSI stripped |
+| `stdout`, `stderr`, `log` | What the test captured, only with `PYMMARY_CAPTURE=1` and only where there was something. See below |
 
 `summary` uses pytest's own outcome vocabulary: `collected`, `passed`, `failed`, `error`, `skipped`, `xfailed`, `xpassed`. `error` is kept distinct from `failed` because an error means the test never ran, and counting it as a failed assertion is a lie. An `xpassed` means something got fixed and nobody updated the marker.
+
+### Captured output
+
+`PYMMARY_CAPTURE=1` adds what a failing test printed and logged, which is often the thing that explains the failure:
+
+```json
+{"nodeid":"tests/test_db.py::test_query","phase":"call","file":"tests/test_db.py","line":12,"type":"AssertionError","message":"assert 0 == 1","stdout":"connecting to db://prod\ngot 0 rows\n","stderr":"boom\n","log":"WARNING  app:db.py:88 cache miss"}
+```
+
+Off by default, because it is the most expensive thing pymmary can add: a single chatty test can outweigh the whole rest of the payload. Only the streams that captured something appear, and only on failures.
+
+Each stream keeps its last 2000 characters, the ones nearest the failure, and says so when it drops any:
+
+```
+[4821 characters omitted]
+...
+```
 
 ### Warnings
 

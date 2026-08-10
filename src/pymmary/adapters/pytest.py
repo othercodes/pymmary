@@ -15,6 +15,8 @@ from pymmary.schema import Failure, Result, WarningInfo
 
 _FAILED_OUTCOMES = ("failed", "error")
 
+CAPTURE_VARIABLE = "PYMMARY_CAPTURE"
+
 PLUGIN_NAME = "pymmary-collector"
 
 
@@ -76,6 +78,7 @@ class Collector:
             collected=session.testscollected,
             exit_code=int(exitstatus),
             duration=time.perf_counter() - self.started,
+            capture=os.environ.get(CAPTURE_VARIABLE) == "1",
         )
         print(render(result, max_failures=max_failures_from(os.environ)))
 
@@ -120,6 +123,7 @@ def _build_result(
     collected: int,
     exit_code: int,
     duration: float,
+    capture: bool,
 ) -> Result:
     counts: Counter[str] = Counter()
     failures: list[Failure] = []
@@ -136,7 +140,7 @@ def _build_result(
             continue
         counts[outcome] += 1
         if outcome in _FAILED_OUTCOMES:
-            failures.append(_failure_of(report))
+            failures.append(_failure_of(report, capture))
 
     summary = {"collected": collected, **counts, "warnings": len(warned)}
 
@@ -244,7 +248,7 @@ def _origin_of(report: pytest.TestReport) -> tuple[str, int]:
     return str(report.location[0]), 0
 
 
-def _failure_of(report: pytest.TestReport) -> Failure:
+def _failure_of(report: pytest.TestReport, capture: bool) -> Failure:
     crash = getattr(report.longrepr, "reprcrash", None)
     raw = crash.message if crash is not None else str(report.longrepr)
     type_name, message = _split_crash_message(raw)
@@ -257,4 +261,7 @@ def _failure_of(report: pytest.TestReport) -> Failure:
         line=line,
         type=type_name,
         message=message,
+        stdout=report.capstdout if capture else "",
+        stderr=report.capstderr if capture else "",
+        log=report.caplog if capture else "",
     )

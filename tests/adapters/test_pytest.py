@@ -464,6 +464,78 @@ def test_plugin_should_not_call_an_empty_run_a_pass(pytester: pytest.Pytester, a
     assert payload["exit_code"] == 5
 
 
+# -- captured output --
+
+
+_NOISY_TEST = """
+    import logging
+    import sys
+
+
+    def test_bad():
+        print("connecting to db://prod")
+        print("boom", file=sys.stderr)
+        logging.getLogger("app").warning("cache miss")
+        assert 0 == 1
+    """
+
+
+@pytest.fixture
+def capturing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PYMMARY_CAPTURE", "1")
+
+
+@pytest.mark.parametrize("stream", ["stdout", "stderr", "log"])
+def test_plugin_should_omit_captured_output_unless_asked(pytester: pytest.Pytester, agent: None, stream: str) -> None:
+    pytester.makepyfile(_NOISY_TEST)
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert stream not in payload["failures"][0]
+
+
+@pytest.mark.parametrize(
+    ("stream", "expected"),
+    [("stdout", "connecting to db://prod"), ("stderr", "boom"), ("log", "cache miss")],
+)
+def test_plugin_should_include_captured_output_when_asked(
+    pytester: pytest.Pytester, agent: None, capturing: None, stream: str, expected: str
+) -> None:
+    pytester.makepyfile(_NOISY_TEST)
+
+    payload = payload_of(pytester.runpytest_inprocess().stdout.str())
+
+    assert expected in payload["failures"][0][stream]
+
+
+def test_plugin_should_omit_a_stream_that_captured_nothing(
+    pytester: pytest.Pytester, agent: None, capturing: None
+) -> None:
+    pytester.makepyfile(
+        """
+        def test_bad():
+            print("only stdout here")
+            assert 0 == 1
+        """
+    )
+
+    failure = payload_of(pytester.runpytest_inprocess().stdout.str())["failures"][0]
+
+    assert "stdout" in failure
+    assert "stderr" not in failure
+    assert "log" not in failure
+
+
+def test_plugin_should_carry_captured_output_across_real_xdist(
+    pytester: pytest.Pytester, agent: None, capturing: None
+) -> None:
+    pytester.makepyfile(_NOISY_TEST)
+
+    failure = payload_of(pytester.runpytest_subprocess("-n", "2").stdout.str())["failures"][0]
+
+    assert "connecting to db://prod" in failure["stdout"]
+
+
 # -- warnings --
 
 
